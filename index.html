@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COG — Digital Library</title>
+<style>
+:root{--bg:#0f1115;--panel:#1a1d24;--ink:#e8eaed;--muted:#9aa0a6;--accent:#7aa2f7;--line:#2a2e37;--ok:#9ece6a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;min-height:100vh}
+header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+header h1{font-size:1.25rem;font-weight:600;letter-spacing:.02em}
+header .tag{font-size:.75rem;color:var(--muted)}
+nav{display:flex;gap:.5rem;flex-wrap:wrap}
+nav button{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem}
+nav button.active,nav button:hover{border-color:var(--accent);color:var(--accent)}
+main{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 70px)}
+@media(max-width:720px){main{grid-template-columns:1fr}}
+aside{border-right:1px solid var(--line);padding:1rem;background:var(--panel)}
+aside h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.75rem}
+.room{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--ink);padding:.55rem .6rem;border-radius:6px;cursor:pointer;font-size:.9rem;margin-bottom:.25rem}
+.room:hover,.room.active{background:#252932;color:var(--accent)}
+.section{padding:1.5rem;overflow:auto}
+.hero{margin-bottom:1.5rem}
+.hero h2{font-size:1.4rem;margin-bottom:.35rem}
+.hero p{color:var(--muted);max-width:42rem;font-size:.95rem}
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--accent)}
+.card .id{font-family:ui-monospace,monospace;font-size:.75rem;color:var(--accent);margin-bottom:.35rem}
+.card h3{font-size:1rem;margin-bottom:.4rem}
+.card .keys{font-size:.8rem;color:var(--muted)}
+.detail{display:none;margin-top:1.5rem;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.25rem}
+.detail.open{display:block}
+.detail h3{margin-bottom:.5rem}
+.addr{font-family:ui-monospace,monospace;background:#12151b;padding:.35rem .6rem;border-radius:4px;font-size:.85rem;display:inline-block;margin-bottom:1rem;color:var(--ok)}
+.variants{list-style:none}
+.variants li{padding:.45rem 0;border-bottom:1px solid var(--line);display:flex;gap:.75rem;align-items:baseline}
+.variants li:last-child{border-bottom:none}
+.variants .idx{font-family:ui-monospace,monospace;font-size:.75rem;color:var(--muted);min-width:1.8rem}
+.fast{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+.fast a{font-size:.8rem;color:var(--accent);text-decoration:none;border:1px solid var(--line);padding:.25rem .55rem;border-radius:4px}
+.fast a:hover{border-color:var(--accent)}
+footer{padding:1rem 1.5rem;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>COG Library</h1>
+    <div class="tag">Dual-number packs · meaning-id + variant-index · smallest wire form</div>
+  </div>
+  <nav>
+    <button data-go="entrance" class="active">Entrance</button>
+    <button data-go="english">English Hall</button>
+    <button data-go="physics">Physics Wing</button>
+    <button data-go="philosophy">Philosophy Wing</button>
+  </nav>
+</header>
+<main>
+  <aside>
+    <h2>Rooms</h2>
+    <button class="room active" data-go="entrance">Entrance</button>
+    <button class="room" data-go="english">English Hall</button>
+    <button class="room" data-go="physics">Physics Wing</button>
+    <button class="room" data-go="philosophy">Philosophy Wing</button>
+    <h2 style="margin-top:1.5rem">Fast Transport</h2>
+    <div class="fast" id="fast-links"></div>
+  </aside>
+  <div class="section" id="view"></div>
+</main>
+<footer>
+  PXD2 COG · public demo seeds only · no production lexicon · wire form is always (meaning-id, variant-index)
+</footer>
+<script>
+const books = {
+  english: {
+    title: "English Hall",
+    blurb: "Everyday inquiry into situation, status, and activity. One meaning-id, many exact surface forms.",
+    file: "books/cog-english-v0.json"
+  },
+  physics: {
+    title: "Physics Wing",
+    blurb: "Core physical meanings packed for exact decode. Force, energy, gravity, relativity, quantum.",
+    file: "books/cog-physics-v0.json"
+  },
+  philosophy: {
+    title: "Philosophy Wing",
+    blurb: "Foundational philosophical meanings. Existence, knowledge, ethics, free will, truth.",
+    file: "books/cog-philosophy-v0.json"
+  }
+};
+
+const cache = {};
+async function load(name) {
+  if (cache[name]) return cache[name];
+  const res = await fetch(books[name].file);
+  const data = await res.json();
+  cache[name] = data;
+  return data;
+}
+
+function entrance() {
+  document.getElementById("view").innerHTML = `
+    <div class="hero">
+      <h2>Welcome to COG</h2>
+      <p>A digital library built on dual-number addressing. Every shared meaning receives one sole number. Every exact surface sentence under that meaning receives a second number. Over the wire only the pair travels. The full phrase is recovered after the book is already mounted.</p>
+      <p style="margin-top:.75rem">Walk the rooms. Click any card to expand the exact variants. Use Fast Transport to jump.</p>
+    </div>
+    <div class="grid">
+      <div class="card" data-go="english"><div class="id">Hall</div><h3>English</h3><div class="keys">inquiry · status · sitrep</div></div>
+      <div class="card" data-go="physics"><div class="id">Wing</div><h3>Physics</h3><div class="keys">force · energy · gravity · relativity · quantum</div></div>
+      <div class="card" data-go="philosophy"><div class="id">Wing</div><h3>Philosophy</h3><div class="keys">existence · knowledge · ethics · free will · truth</div></div>
+    </div>`;
+  bindCards();
+}
+
+async function showRoom(name) {
+  const meta = books[name];
+  const data = await load(name);
+  const cards = data.s.map(row => {
+    const [id, keys, , phrases] = row;
+    return `<div class="card" data-id="${id}" data-room="${name}">
+      <div class="id">meaning-id ${id}</div>
+      <h3>${keys[0].replace(/_/g," ")}</h3>
+      <div class="keys">${keys.join(" · ")} · ${phrases.length} variants</div>
+    </div>`;
+  }).join("");
+  document.getElementById("view").innerHTML = `
+    <div class="hero">
+      <h2>${meta.title}</h2>
+      <p>${meta.blurb}</p>
+    </div>
+    <div class="grid">${cards}</div>
+    <div class="detail" id="detail"></div>`;
+  document.querySelectorAll(".card[data-id]").forEach(c => {
+    c.onclick = () => expand(name, +c.dataset.id);
+  });
+  const fl = document.getElementById("fast-links");
+  fl.innerHTML = data.s.map(r => `<a href="#" data-jump="${name}:${r[0]}">${r[0]}</a>`).join("");
+  fl.querySelectorAll("a").forEach(a => {
+    a.onclick = e => { e.preventDefault(); const [rm,id] = a.dataset.jump.split(":"); go(rm); setTimeout(()=>expand(rm,+id),50); };
+  });
+}
+
+function expand(room, id) {
+  const data = cache[room];
+  const row = data.s.find(r => r[0] === id);
+  if (!row) return;
+  const [, keys, , phrases] = row;
+  const list = phrases.map((p,i) => `<li><span class="idx">${i}</span><span>${p}</span></li>`).join("");
+  const d = document.getElementById("detail");
+  d.className = "detail open";
+  d.innerHTML = `
+    <h3>${keys[0].replace(/_/g," ")}</h3>
+    <div class="addr">(${id}, N) — N = variant-index</div>
+    <ul class="variants">${list}</ul>`;
+  d.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+function go(name) {
+  document.querySelectorAll("nav button, .room").forEach(b => {
+    b.classList.toggle("active", b.dataset.go === name);
+  });
+  if (name === "entrance") entrance();
+  else showRoom(name);
+}
+
+function bindCards() {
+  document.querySelectorAll(".card[data-go]").forEach(c => {
+    c.onclick = () => go(c.dataset.go);
+  });
+}
+
+document.querySelectorAll("nav button, .room").forEach(b => {
+  b.onclick = () => go(b.dataset.go);
+});
+entrance();
+</script>
+</body>
+</html>
