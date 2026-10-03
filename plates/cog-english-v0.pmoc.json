@@ -1,0 +1,58 @@
+{
+  "m": "PMOC1",
+  "v": 1,
+  "fl": 0,
+  "slices": [
+    {
+      "id": "00000000000000000000000000000001",
+      "k": 3,
+      "numa": 0,
+      "crc": 0,
+      "body": {
+        "name": "cog-english-v0",
+        "ver": 1,
+        "w": 2,
+        "crc": 0,
+        "s": [
+          [
+            1,
+            ["whats_going_on", "status", "situation", "inquiry"],
+            [0],
+            [
+              "what's going on",
+              "what's up",
+              "what's happening",
+              "what's the deal",
+              "what's the situation",
+              "sitrep",
+              "situation report",
+              "status",
+              "status report",
+              "what's the word",
+              "what's the 411",
+              "what's the scoop",
+              "how's it hanging",
+              "what's shakin'",
+              "any updates",
+              "report",
+              "give me a sitrep",
+              "what's the latest",
+              "how are things",
+              "what's new",
+              "what are you doing",
+              "what's you doing",
+              "what you up to",
+              "what are you up to",
+              "how's it going",
+              "what's good",
+              "sup",
+              "wassup",
+              "what up",
+              "yo what's good"
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
