@@ -1,0 +1,26 @@
+{
+  "m": "PMOC1",
+  "v": 1,
+  "fl": 0,
+  "slices": [
+    {
+      "id": "00000000000000000000000000000100",
+      "k": 3,
+      "numa": 0,
+      "crc": 0,
+      "body": {
+        "name": "cog-physics-v0",
+        "ver": 1,
+        "w": 2,
+        "crc": 0,
+        "s": [
+          [100, ["force", "newton"], [0], ["force equals mass times acceleration", "F = ma", "force is mass times acceleration", "Newton's second law", "the force on an object is its mass times its acceleration"]],
+          [101, ["energy", "conservation"], [0], ["energy cannot be created or destroyed", "conservation of energy", "energy is conserved", "the total energy of an isolated system remains constant", "energy is neither created nor destroyed"]],
+          [102, ["gravity", "newtonian"], [0], ["every particle attracts every other particle", "Newton's law of universal gravitation", "gravity is the force of attraction between masses", "the gravitational force is proportional to the product of the masses", "objects fall because of gravity"]],
+          [103, ["relativity", "einstein"], [0], ["the speed of light is constant", "E equals mc squared", "E = mc²", "mass and energy are equivalent", "space and time are relative"]],
+          [104, ["quantum", "uncertainty"], [0], ["you cannot know both position and momentum exactly", "Heisenberg uncertainty principle", "the uncertainty principle", "measurement affects the system", "quantum states are probabilistic"]]
+        ]
+      }
+    }
+  ]
+}

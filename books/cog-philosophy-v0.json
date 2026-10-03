@@ -1,0 +1,68 @@
+{
+  "name": "cog-philosophy-v0",
+  "ver": 1,
+  "w": 2,
+  "crc": 0,
+  "s": [
+    [
+      200,
+      ["existence", "ontology"],
+      [0],
+      [
+        "I think therefore I am",
+        "cogito ergo sum",
+        "to be is to be perceived",
+        "existence precedes essence",
+        "what does it mean to exist"
+      ]
+    ],
+    [
+      201,
+      ["knowledge", "epistemology"],
+      [0],
+      [
+        "knowledge is justified true belief",
+        "I know that I know nothing",
+        "all knowledge begins with experience",
+        "a priori versus a posteriori",
+        "how do we know what we know"
+      ]
+    ],
+    [
+      202,
+      ["ethics", "morality"],
+      [0],
+      [
+        "the greatest good for the greatest number",
+        "act only according to that maxim",
+        "do unto others as you would have them do unto you",
+        "virtue is the mean",
+        "what is the right thing to do"
+      ]
+    ],
+    [
+      203,
+      ["free_will", "determinism"],
+      [0],
+      [
+        "do we have free will",
+        "everything is determined",
+        "compatibilism",
+        "the will is free",
+        "can we choose otherwise"
+      ]
+    ],
+    [
+      204,
+      ["truth", "correspondence"],
+      [0],
+      [
+        "truth is correspondence with reality",
+        "what is truth",
+        "the truth will set you free",
+        "there is no absolute truth",
+        "truth is what works"
+      ]
+    ]
+  ]
+}

@@ -10,49 +10,42 @@ Dual-number sequential sentence system:
 Wire form is only the pair `(meaning-id, variant-index)`.  
 Full phrase is recovered only after the shared kind-3 book is mounted.
 
-## Current book
+## Books (finite public demo seeds)
 
-- `books/cog-english-v0.json` — public demo seed
-- `plates/cog-english-v0.pmoc.json` — inspectable PMOC1 plate
+| Book | Path | Meaning-id range |
+|------|------|------------------|
+| English inquiry | `books/cog-english-v0.json` | 1 |
+| Physics core | `books/cog-physics-v0.json` | 100–104 |
+| Philosophy core | `books/cog-philosophy-v0.json` | 200–204 |
 
-## Chapter 1 — meaning-id 1
+Matching inspectable plates live under `plates/`.
 
-Meaning: inquiry into current situation / status / activity
+## Chapter 1 — English (meaning-id 1)
+Inquiry into current situation / status / activity (30 variants).  
+Example: `(1, 5)` → sitrep
 
-Variants (0-based index):
+## Chapter 2 — Physics (meaning-ids 100–104)
 
-0. what's going on  
-1. what's up  
-2. what's happening  
-3. what's the deal  
-4. what's the situation  
-5. sitrep  
-6. situation report  
-7. status  
-8. status report  
-9. what's the word  
-10. what's the 411  
-11. what's the scoop  
-12. how's it hanging  
-13. what's shakin'  
-14. any updates  
-15. report  
-16. give me a sitrep  
-17. what's the latest  
-18. how are things  
-19. what's new  
-20. what are you doing  
-21. what's you doing  
-22. what you up to  
-23. what are you up to  
-24. how's it going  
-25. what's good  
-26. sup  
-27. wassup  
-28. what up  
-29. yo what's good
+| id | keys | sample exact phrases |
+|----|------|----------------------|
+| 100 | force, newton | F = ma · Newton's second law |
+| 101 | energy, conservation | energy cannot be created or destroyed |
+| 102 | gravity, newtonian | Newton's law of universal gravitation |
+| 103 | relativity, einstein | E = mc² · space and time are relative |
+| 104 | quantum, uncertainty | Heisenberg uncertainty principle |
 
-Address example: `(1, 5)` → sitrep
+## Chapter 3 — Philosophy (meaning-ids 200–204)
 
-No production lexicon. No invented ids beyond this finite public seed.
-Public contract remains `PxD2/lex`.
+| id | keys | sample exact phrases |
+|----|------|----------------------|
+| 200 | existence, ontology | I think therefore I am · cogito ergo sum |
+| 201 | knowledge, epistemology | knowledge is justified true belief |
+| 202 | ethics, morality | the greatest good for the greatest number |
+| 203 | free_will, determinism | do we have free will · compatibilism |
+| 204 | truth, correspondence | truth is correspondence with reality |
+
+## Rules
+- No production lexicon.
+- No invented ids beyond these finite public seeds.
+- Public contract remains `PxD2/lex`.
+- Receipt only until Dialect-1 Accept.
