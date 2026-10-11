@@ -1,41 +1,54 @@
 # COG
 
-**PXD2 Digital Library** — dual-number sequential sentence packs
+**Permanent library of human meanings.**
 
-Live site (after GitHub Pages is enabled on `main` / root):
+Every distinct meaning receives one permanent number.  
+Every exact surface sentence under that meaning receives a second number.
+
+The pair `(meaning-id, variant-index)` is the complete address.  
+Nothing else travels. The full sentence is recovered only after the shared book is mounted.
+
+---
+
+## Why this exists
+
+- Addresses never break.
+- One shared book of meanings replaces endless duplicated text.
+- Everything lives on GitHub. Nothing stays on your machine.
+- Growth is pure append: next free meaning-id or next variant-index.
+- The same packs power a walkable digital library and future VR rooms.
+
+## Live library
+
 https://pxd2.github.io/cog/
 
-## What it is
-A walkable digital library (modern Encarta-style) built on the smallest practical packs:
+(Enable GitHub Pages on `main` / root if not already live.)
 
-- **meaning-id** = one number for the shared meaning
-- **variant-index** = second number for the exact surface sentence
+## Numerical sequence
 
-Wire form is only the pair `(meaning-id, variant-index)`.  
-Full text is recovered only after the shared kind-3 book is already mounted.
+| Range | Domain |
+|-------|--------|
+| 1 | English inquiry |
+| 100–104 | Physics core |
+| 200–204 | Philosophy core |
+| 300+ | Open |
 
-## Rooms
-| Room | Book | IDs |
-|------|------|-----|
-| English Hall | `books/cog-english-v0.json` | 1 |
-| Physics Wing | `books/cog-physics-v0.json` | 100–104 |
-| Philosophy Wing | `books/cog-philosophy-v0.json` | 200–204 |
+## Structure
 
-## Site features
-- Walk-through rooms via sidebar or top nav
-- Fast Transport jumps straight to any meaning-id
-- Click any card → expands exact variants with dual-number address
-- Single ~8 KB HTML + tiny JSON packs (no framework, no bloat)
-
-## Enable the site
-1. Repo → Settings → Pages
-2. Source: Deploy from a branch
-3. Branch: `main` / root
-4. Save → site appears at https://pxd2.github.io/cog/
+```
+books/     dual-number packs (JSON)
+plates/    PMOC-ready inspectable twins
+index.html walkable digital library
+```
 
 ## Rules
-- Public demo seeds only
-- No production lexicon
-- No invented ids beyond these finite packs
-- Public contract remains `PxD2/lex`
-- Receipt only until Dialect-1 Accept
+
+- Never rewrite an existing meaning-id.
+- Keep every pack under 1 MB.
+- Push only the delta.
+- No production lexicon invented here.
+- Public contract remains `PxD2/lex`.
+
+## One sentence
+
+A permanent, append-only library of meanings, addressed by two numbers, stored only on GitHub, grown one exact sentence at a time.
