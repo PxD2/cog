@@ -4,7 +4,7 @@
     blender -b -P build_sets.py -- --scene hall --out ./out --res 2048 --samples 256 --gpu   # base1 RTX 5080, high quality
 
 Scenes
-  hall        The Great Hall: a marble rotunda with a coffered dome and oculus, 24 fluted columns and 10 niches.
+  hall        The Great Hall: a marble rotunda with a coffered dome and oculus, 24 fluted columns and 12 niches (3 of them doorways).
               NICHE_0 is the doorway to the Hall of Presidents, NICHE_1..8 hold the subject shelves, NICHE_9 the screen.
   presidents  The Hall of Presidents: a theater with a proscenium arch, velvet curtains, a lectern and
               47 pedestals on three curved tiers (P01..P47).
@@ -276,7 +276,7 @@ def build_hall():
     for i in range(16):
         bm.faces.new((c, pts[i], pts[(i + 1) % 16]))
     put(mesh_from_bm("compass", bm), "trim", "gold")
-    # wall with 10 niches
+    # wall with NN niches
     wall_r, wall_h = R + 2.2, 9.0
     seg = 120
     bm = bmesh.new()
@@ -288,7 +288,7 @@ def build_hall():
         verts.append((bm.verts.new((math.cos(a) * wall_r, math.sin(a) * wall_r, 0)), bm.verts.new((math.cos(a) * wall_r, math.sin(a) * wall_r, wall_h))))
     for i in range(seg):
         a = (i + 0.5) / seg * math.tau
-        if any(abs(((a - k * math.tau / 10 + math.pi) % math.tau) - math.pi) < niche_half for k in range(NN)):
+        if any(abs(((a - k * math.tau / NN + math.pi) % math.tau) - math.pi) < niche_half for k in range(NN)):
             # opening: wall only above the niche arch
             b0, t0 = verts[i]; b1, t1 = verts[i + 1]
             m0 = bm.verts.new((b0.co.x, b0.co.y, 5.2)); m1 = bm.verts.new((b1.co.x, b1.co.y, 5.2))
