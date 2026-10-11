@@ -26,6 +26,7 @@ import cog_absorber as A        # noqa: E402
 import library_desk as D        # noqa: E402
 import publish_articles as P     # noqa: E402
 import cog_vault_sync as V       # noqa: E402
+import archives as AR             # noqa: E402
 
 SETTINGS = HERE / "cog_absorber_gui.json"
 LOG = HERE / "cog_absorber_log.txt"
@@ -316,17 +317,25 @@ class Window(QMainWindow):
             self._add_item(src)
         gv.addWidget(self.list, 1)
         addrow = QHBoxLayout()
+        self.arch = QComboBox()
+        self.arch.addItem("Library of Congress", "loc")
+        self.arch.addItem("Internet Archive", "ia")
         self.kind = QComboBox()
         self.kind.addItems(["Search words", "Collection"])
+        self.fmt = QComboBox()
+        self.arch.currentIndexChanged.connect(self._fill_fmt)
+        self._fill_fmt()
         self.new = QLineEdit(placeholderText="search words, a collection slug, or a loc.gov collection link")
         self.new.returnPressed.connect(self.add_source)
         b = QPushButton("Add")
         b.clicked.connect(self.add_source)
         self.secpick = QComboBox()
         self._fill_secpick()
+        addrow.addWidget(self.arch)
         addrow.addWidget(self.kind)
-        addrow.addWidget(self.new, 1)
+        addrow.addWidget(self.fmt)
         gv.addLayout(addrow)
+        gv.addWidget(self.new)
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("into section"))
         row2.addWidget(self.secpick, 1)
@@ -364,7 +373,7 @@ class Window(QMainWindow):
         og.addWidget(self.items, 0, 1)
         og.addWidget(QLabel("Catalogue pages max"), 1, 0)
         og.addWidget(self.pages, 1, 1)
-        self.books = QCheckBox("Searches: books / printed text only", checked=bool(self.s["books"]))
+        self.books = QCheckBox("loc.gov searches with no format picked: books only", checked=bool(self.s["books"]))
         self.rights = QCheckBox("Rights gate: only pre-1930 or open-rights items (the repo is public)", checked=bool(self.s["rights"]))
         self.dry = QCheckBox("Dry run — number it and show it, push nothing", checked=bool(self.s["dry"]))
         og.addWidget(self.books, 2, 0, 1, 2)
@@ -461,23 +470,38 @@ class Window(QMainWindow):
         it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         it.setCheckState(Qt.CheckState.Checked if src.get("on") else Qt.CheckState.Unchecked)
         it.setData(Qt.ItemDataRole.UserRole, src)
-        it.setToolTip(("loc.gov collection: " if src["kind"] == "collection" else "loc.gov search: ") + src["value"])
+        it.setToolTip(AR.describe(self._src_string(src, False)))
         self.list.addItem(it)
+
+    def _fill_fmt(self):
+        self.fmt.clear()
+        self.fmt.addItem("Any format", "")
+        for k, v in (AR.IA_FORMATS if self.arch.currentData() == "ia" else AR.LOC_FORMATS).items():
+            self.fmt.addItem(v, k)
+        self.kind.setEnabled(self.arch.currentData() != "ia")
 
     def add_source(self):
         t = self.new.text().strip()
         if not t:
             return
+        arch, fmt = self.arch.currentData(), self.fmt.currentData() or ""
         m = re.search(r"loc\.gov/collections/([^/?#]+)", t)
-        if m or self.kind.currentIndex() == 1:
+        if arch == "loc" and (m or self.kind.currentIndex() == 1):
             slug = m.group(1) if m else re.sub(r"\s+", "-", t.lower())
-            src = dict(kind="collection", value=slug, label="Collection · " + slug, on=True)
+            src = dict(kind="collection", value=slug, label="Collection · " + slug, on=True, archive="loc", fmt="")
         else:
-            src = dict(kind="query", value=t, label="Search · " + t, on=True)
+            fname = (AR.IA_FORMATS if arch == "ia" else AR.LOC_FORMATS).get(fmt, "")
+            src = dict(kind="query", value=t, on=True, archive=arch, fmt=fmt,
+                       label=("Internet Archive · " if arch == "ia" else "Search · ") + t + (f" · {fname}" if fname else ""))
         src["section"] = self.secpick.currentData() or "general"
         self._add_item(src)
         self.new.clear()
         self._save()
+
+    def _src_string(self, x: dict, books: bool) -> str:
+        arch = x.get("archive", "loc")
+        fmt = x.get("fmt") or ("books" if books and arch == "loc" and x["kind"] == "query" else "")
+        return AR.make_src(arch, x["kind"], x["value"], fmt)
 
     def remove_source(self):
         for it in self.list.selectedItems():
@@ -552,8 +576,8 @@ class Window(QMainWindow):
         self.plan = None
         self.invoke = Invoker()
         self.desk = D.Desk(D.Reader(A.GitHubStore(self.s["repo"], self.s["branch"])), hooks={
-            "sources": lambda: self.invoke(lambda: [{k: x[k] for k in ("kind", "value", "section", "on")} for x in self._sources()]),
-            "add_source": lambda k, val, sec: self.invoke(lambda: self._desk_add_source(k, val, sec)),
+            "sources": lambda: self.invoke(lambda: [{k: x.get(k, "") for k in ("kind", "value", "section", "on", "archive", "fmt")} for x in self._sources()]),
+            "add_source": lambda k, val, sec, arch="loc", fmt="": self.invoke(lambda: self._desk_add_source(k, val, sec, arch, fmt)),
             "new_section": lambda t, st: self.invoke(lambda: self._desk_new_section(t, st)),
             "propose": lambda plan: self.invoke(lambda: self._desk_propose(plan)),
             "log_tail": lambda n: self.invoke(lambda: "\n".join(self.out.toPlainText().splitlines()[-n:]) or "(log is empty)"),
@@ -618,14 +642,20 @@ class Window(QMainWindow):
                 return k
         return None
 
-    def _desk_add_source(self, kind: str, value: str, section: str) -> str:
+    def _desk_add_source(self, kind: str, value: str, section: str, archive: str = "loc", fmt: str = "") -> str:
         sid = self._sec_id(section)
         if not sid:
             return f"no section called {section!r}; sections are: " + ", ".join(v["title"] for v in self.s["sections"].values())
         for x in self._sources():
             if x["value"].lower() == value.lower():
                 return f"{value} is already a source (section {x.get('section')})"
-        src = dict(kind=kind, value=value, label=("Collection · " if kind == "collection" else "Search · ") + value, section=sid, on=False)
+        archive = "ia" if archive in ("ia", "internet archive", "archive.org") else "loc"
+        if fmt and fmt not in (AR.IA_FORMATS if archive == "ia" else AR.LOC_FORMATS):
+            return f"format must be one of: {', '.join(AR.IA_FORMATS if archive == 'ia' else AR.LOC_FORMATS)}"
+        fname = (AR.IA_FORMATS if archive == "ia" else AR.LOC_FORMATS).get(fmt, "")
+        src = dict(kind="query" if archive == "ia" else kind, value=value, section=sid, on=False, archive=archive, fmt=fmt,
+                   label=("Collection · " if kind == "collection" and archive == "loc" else "Internet Archive · " if archive == "ia" else "Search · ")
+                   + value + (f" · {fname}" if fname else ""))
         self._add_item(src)
         self._save()
         self.say(f"Desk added source: {value} → {self.s['sections'][sid]['title']}")
@@ -782,7 +812,7 @@ class Window(QMainWindow):
         sources = []
         for x in on:
             sec = self.s["sections"].get(x.get("section", "general"), {"title": "General", "store": "core"})
-            sources.append({"src": ("q:" + x["value"] + tag) if x["kind"] == "query" else x["value"],
+            sources.append({"src": self._src_string(x, self.books.isChecked()),
                             "section": x.get("section", "general"), "title": sec["title"], "store": sec["store"]})
         self.go.setEnabled(False)
         self.stopb.setEnabled(True)
@@ -853,7 +883,7 @@ class Window(QMainWindow):
             name = src[2:].replace(A.L.BOOKS_TAG, "") if src.startswith("q:") else src
             rows.append(f"{name}: {'complete' if p.get('done') else str(p.get('pages', 0)) + ' page(s) in'}")
         self.srcinfo.setText("Where each source left off — " + " · ".join(rows) if rows else
-                             "Nothing absorbed yet. Absorbed meanings start at 1000.")
+                             "No archive sources run yet. Absorbed meanings start at 1000.")
 
     # schedules
     def show_timed(self):

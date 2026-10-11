@@ -23,7 +23,7 @@ Nothing else travels. The full sentence is recovered only after the shared book 
 https://pxd2.github.io/cog/alexandria/
 
 A modern encyclopedia built only from these packs: articles at two reading levels (K–5 / 6–12), read-aloud, quizzes,
-timeline, atlas, primary sources, instant search over every sentence, and a tutor that answers only from the library
+timeline, atlas, primary sources, media (films, recordings, photos, maps streamed from the archive), instant search over every sentence, and a tutor that answers only from the library
 (each quote shows its address). "Enter the Hall" opens a 3D Great Hall; in a VR headset browser it becomes WebXR.
 COG numbers stay hidden until you press `#`. Articles: `sections/encyclopedia/` (published by `tools/publish_articles.py`).
 Optional: the tutor can use base1's Ollama (start it with `OLLAMA_ORIGINS=https://pxd2.github.io`).
@@ -69,6 +69,9 @@ Documents are held in **library sections** (Law, The Reformers, ...). Each secti
 here (`sections/<name>/`) or its own repository (`owner/repo`). Meaning-ids stay global: one registry in core, so the
 same sentence has the same address in every section. Section repos are written first, core second, so core never
 points at a document that is not there. The site reads core sections directly and public section repos via raw GitHub.
+Sources: the Library of Congress (any format: books, film-and-videos, audio, photos, maps, manuscripts, newspapers) and the
+Internet Archive (movies, audio, texts, image). Films, recordings and pictures are never copied here — GitHub rejects files
+over 100 MB and the library stays small — so each keeps its catalogue text and captions/transcript as COG plus stream links.
 A rights gate holds back anything after 1930 without an open-rights statement, because this repo is public.
 
 ```

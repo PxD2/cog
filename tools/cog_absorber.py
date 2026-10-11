@@ -38,6 +38,7 @@ from urllib.request import Request, urlopen
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import loc_loader as L                      # noqa: E402
+import archives as AR                       # noqa: E402
 from cog import segments, STOP, WORD        # noqa: E402
 
 REPO = "PxD2/cog"
@@ -468,12 +469,17 @@ class Library:
         ym = YEAR1.search(meta.get("date", "") or "")
         for i, p in enumerate(parts):
             entry = dict(meta, id=item_id, n=n, chars=len(text), seq=p, at=now())
+            if i:
+                entry.pop("media", None)
             if len(parts) > 1:
                 entry["part"] = f"{i + 1}/{len(parts)}"
             f, pos = self._place(sec, entry)
             if i == 0:
+                media = meta.get("media") or []
                 self._index(sec, {"id": item_id, "k": "doc", "t": meta.get("title"), "y": int(ym.group(1)) if ym else None,
-                                  "d": meta.get("date"), "f": f, "i": pos, "n": n, "parts": len(parts) if len(parts) > 1 else None})
+                                  "d": meta.get("date"), "f": f, "i": pos, "n": n, "parts": len(parts) if len(parts) > 1 else None,
+                                  "fm": meta.get("format"), "th": meta.get("thumb"), "ar": meta.get("archive"),
+                                  "mv": sum(1 for m in media if m["type"] in ("video", "audio")) or None})
             self.pending += len(p) + 200
         self.mark(item_id, f"{sec}:{self.dfile(sec, sst['open'])}")
         self.state["totals"]["docs"] += 1
@@ -600,20 +606,19 @@ class Library:
 
 # ------------------------------------------------------------------------------------------- rights
 YEAR = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
-OPEN = re.compile(r"no known restrictions|public domain|free to use|not subject to copyright|no known copyright", re.I)
+OPEN = re.compile(r"no known restrictions|public domain|publicdomain|free to use|not subject to copyright|no known copyright|"
+                  r"creativecommons\.org/licenses/by(-sa)?/", re.I)
 
 
-def rights_ok(meta: dict, item_json: dict | None, cutoff: int = 1930) -> tuple[bool, str]:
+def rights_ok(meta: dict, rights: str = "", cutoff: int = 1930) -> tuple[bool, str]:
     """Hold back anything that may still be under copyright: the GitHub library is public."""
+    if isinstance(rights, dict) or rights is None:            # older callers passed the loc.gov item JSON
+        it = (rights or {}).get("item") or {}
+        rights = " ".join(L.as_text(it.get(k)) for k in ("rights_advisory", "rights", "rights_information")) + " " + L.as_text((rights or {}).get("rights"))
     years = [int(y) for y in YEAR.findall(meta.get("date", ""))]
     if years and min(years) < cutoff:
         return True, f"published {min(years)}"
-    rights = ""
-    if item_json:
-        it = item_json.get("item") or {}
-        rights = " ".join(L.as_text(it.get(k)) for k in ("rights_advisory", "rights", "rights_information"))
-        rights += " " + L.as_text(item_json.get("rights"))
-    if OPEN.search(rights):
+    if OPEN.search(rights or ""):
         return True, "open rights statement"
     return False, "date after %d and no open-rights statement" % cutoff
 
@@ -641,63 +646,69 @@ class Absorber:
             sec_id = [k for k, v in lib.state["sections"].items() if v is sec][0]
             if self.stop.is_set() or got >= max_items:
                 break
-            prog = lib.state["sources"].setdefault(src, {"next": L.start_url(src, self.per_page), "pages": 0, "done": False})
+            ad = AR.adapter_for(src, self.fetcher, self.per_page)
+            prog = lib.state["sources"].setdefault(src, {"next": ad.start_url(src), "pages": 0, "done": False})
             if prog.get("done"):
-                self.log(f"{src}: already fully absorbed")
+                self.log(f"{AR.describe(src)}: already fully absorbed")
                 continue
             url, pages = prog["next"], 0
-            self.log(f"{src}: catalogue page {prog['pages'] + 1}")
+            self.log(f"{AR.describe(src)}: catalogue page {prog['pages'] + 1}")
             while url and got < max_items and pages < max_pages and not self.stop.is_set():
-                data = self.fetcher.get_json(url)
-                if not isinstance(data, dict):
-                    self.log(f"  loc.gov did not answer for {url} — try again later (place kept)")
+                results, nxt = ad.page(url)
+                if results is None:
+                    self.log(f"  {ad.name} did not answer for {url} — try again later (place kept)")
                     break
-                results = [r for r in (data.get("results") or []) if isinstance(r, dict)]
                 page_complete = True
                 for rec in results:
                     if self.stop.is_set() or got >= max_items:
                         page_complete = False
                         break
-                    item_id = L.as_text(rec.get("id") or rec.get("url"))
-                    if not item_id or lib.seen(item_id):
+                    rid = L.as_text(rec.get("id") or rec.get("url")) if ad.name == "loc.gov" else f"https://archive.org/details/{rec.get('identifier')}"
+                    if not rid or lib.seen(rid):
                         continue
-                    meta = {"title": L.as_text(rec.get("title"))[:300], "date": L.as_text(rec.get("date") or rec.get("dates"))[:40],
-                            "url": L.as_text(rec.get("url") or item_id), "source": src, "section": sec_id}
-                    api = L.item_api_url(item_id)
-                    ij = self.fetcher.get_json(api) if api else None
-                    ij = ij if isinstance(ij, dict) else None
+                    it = ad.item(rec)
+                    if not it:
+                        continue
+                    meta = {"title": it["title"], "date": it["date"], "url": it["url"], "source": src, "section": sec_id,
+                            "archive": ad.name, "format": it["format"]}
+                    if it.get("thumb"):
+                        meta["thumb"] = it["thumb"]
+                    if it.get("media"):
+                        meta["media"] = it["media"]
                     if self.rights_gate:
-                        ok, why = rights_ok(meta, ij)
+                        ok, why = rights_ok(meta, it.get("rights", ""))
                         if not ok:
-                            lib.mark(item_id, "-held")
+                            lib.mark(it["id"], "-held")
                             held += 1
                             self.log(f"  held back ({why}): {meta['title'][:70]}")
                             continue
-                    text = ""
-                    found = L.find_text_url(ij) if ij else None
-                    if found:
-                        kind, turl = found
-                        raw = self.fetcher.get_bytes(turl)
+                    text, kind = ad.text(it), "fulltext"
+                    if len(text) < MIN_TEXT:                     # recordings: captions are the transcript
+                        cap = next((m for m in it.get("media") or [] if m["type"] == "caption"), None)
+                        raw = self.fetcher.get_bytes(cap["url"]) if cap else None
                         if isinstance(raw, (bytes, bytearray)):
-                            text = L.to_text(kind, turl, raw)
-                    if len(text) < MIN_TEXT:
-                        lib.mark(item_id, "-")
+                            text, kind = AR.captions_to_text(raw), "captions"
+                    if len(text) < MIN_TEXT and it.get("media") and len(it.get("catalogue", "")) >= AR.MIN_MEDIA_TEXT:
+                        text, kind = it["catalogue"], "catalogue"   # a film or photo with no transcript: keep its record
+                    if len(text) < (MIN_TEXT if kind == "fulltext" else AR.MIN_MEDIA_TEXT):
+                        lib.mark(it["id"], "-")
                         empty += 1
-                        self.log(f"  no text online: {meta['title'][:70]}")
+                        self.log(f"  no text or media online: {meta['title'][:70]}")
                         continue
+                    meta["text_from"] = kind
                     before = lib.state["totals"]["meanings"]
-                    n = lib.add_doc(item_id, meta, text, sec_id)
+                    n = lib.add_doc(it["id"], meta, text, sec_id)
                     got += 1
-                    self.log(f"  [{got}/{max_items}] {n:,} sentences · +{lib.state['totals']['meanings'] - before:,} new meanings · {meta['title'][:70]}")
+                    media = f" · {len(it['media'])} media link(s)" if it.get("media") else ""
+                    self.log(f"  [{got}/{max_items}] {meta['format']} · {n:,} sentences ({kind}){media} · +{lib.state['totals']['meanings'] - before:,} new meanings · {meta['title'][:60]}")
                     self.progress(got, max_items, meta["title"])
                     del text
                     if lib.pending >= COMMIT_EVERY:
-                        last_sha = lib.flush(f"COG absorb: +{got} documents from loc.gov ({src})")
+                        last_sha = lib.flush(f"COG absorb: +{got} items from {ad.name} ({src})")
                         self.log(f"  pushed to GitHub {str(last_sha)[:7]}")
                 if page_complete:
                     pages += 1
                     prog["pages"] += 1
-                    nxt = (data.get("pagination") or {}).get("next")
                     prog["next"], prog["done"] = nxt, not nxt
                     lib.dirty.add("r")
                     url = nxt
@@ -843,6 +854,50 @@ def selftest() -> None:
     cat = json.loads(store.files["books/catalog.json"])
     secs = {x["id"]: x for x in cat["sections"]}
     assert secs["reformers"]["base"].startswith("https://raw.githubusercontent.com/PxD2/cog-reformers/") and secs["law"]["base"] == ""
+    # recordings and other archives: captions become the transcript, media stays as links
+    av = {
+        "https://www.loc.gov/film-and-videos/?q=edison&fo=json&c=25&sp=1": {"pagination": {}, "results": [
+            {"id": "http://www.loc.gov/item/v1/", "title": "Edison film", "date": "1899", "original_format": ["film, video"],
+             "image_url": ["https://tile.loc.gov/image-services/iiif/v1/full/pct:25/0/default.jpg"]},
+            {"id": "http://www.loc.gov/item/p1/", "title": "Photo of a mill", "date": "1885", "original_format": ["photo, print, drawing"],
+             "description": ["A stone grist mill on the river, photographed from the east bank in autumn."]}]},
+        "https://www.loc.gov/item/v1/?fo=json": {"item": {}, "resources": [{"video": "https://tile.loc.gov/v1/v1.mp4",
+             "files": [[{"mimetype": "text/vtt", "url": "https://tile.loc.gov/v1/v1.vtt"}]]}]},
+        "https://www.loc.gov/item/p1/?fo=json": {"item": {"summary": "A stone grist mill on the river, photographed from the east bank in autumn."},
+             "resources": [{"image": "https://tile.loc.gov/image-services/iiif/p1/full/pct:50/0/default.jpg"}]},
+        "https://archive.org/advancedsearch.php?q=%28prelinger%29%20AND%20mediatype%3A%28movies%29&fl[]=identifier&fl[]=title&fl[]=date&fl[]=year&fl[]=mediatype&fl[]=licenseurl&rows=25&page=1&output=json":
+            {"response": {"numFound": 2, "docs": [{"identifier": "oldfilm", "title": "Old Film", "mediatype": "movies", "year": "1952"},
+                                                   {"identifier": "newfilm", "title": "New Film", "mediatype": "movies", "year": "2005"}]}},
+        "https://archive.org/metadata/oldfilm": {"metadata": {"title": "Old Film", "mediatype": "movies", "year": "1952",
+             "licenseurl": "http://creativecommons.org/publicdomain/mark/1.0/", "description": "A civil defense film."},
+             "files": [{"name": "oldfilm.mp4", "format": "h.264"}, {"name": "oldfilm.srt", "format": "SubRip"}]},
+        "https://archive.org/metadata/newfilm": {"metadata": {"title": "New Film", "mediatype": "movies", "year": "2005"}, "files": []},
+    }
+    blobs = {"https://tile.loc.gov/v1/v1.vtt": b"WEBVTT\n\n00:00.000 --> 00:02.000\nThe train arrives at the station.\n\n00:02.000 --> 00:04.000\nThe train arrives at the station.\nPeople step down to the platform.\n",
+             "https://archive.org/download/oldfilm/oldfilm.srt": b"1\n00:00:01,000 --> 00:00:03,000\nDuck and cover, children.\n\n2\n00:00:03,000 --> 00:00:05,000\nThis film shows how to stay safe.\n"}
+
+    class AVFetcher:
+        def get_json(self, url):
+            return av.get(url)
+
+        def get_bytes(self, url):
+            return blobs.get(url)
+
+    st2 = MemStore()
+    r = Absorber(st2, AVFetcher(), log=logs.append).run(
+        [{"src": "q:edison |fmt:film-and-videos", "section": "film", "title": "Film & Sound"},
+         {"src": "ia:prelinger |fmt:movies", "section": "film", "title": "Film & Sound"}], max_items=10)
+    assert r["docs"] == 3 and r["held_back"] == 1, (r, logs[-6:])
+    docs = json.loads(st2.files["sections/film/docs-0001.json"])["docs"]
+    v = docs[0]
+    assert v["format"] == "video" and v["text_from"] == "captions" and any(m["type"] == "video" for m in v["media"]), v
+    assert decode(st2, v["seq"]) == "The train arrives at the station. People step down to the platform."
+    ph = docs[1]
+    assert ph["format"] == "image" and ph["text_from"] == "catalogue" and ph["media"][0]["type"] == "image"
+    ia = docs[2]
+    assert ia["archive"] == "Internet Archive" and ia["text_from"] == "captions" and ia["media"][0]["url"].endswith("oldfilm.mp4")
+    ix = json.loads(st2.files["sections/film/index-0001.json"])["e"]
+    assert ix[0]["fm"] == "video" and ix[0]["mv"] == 1 and ix[1]["fm"] == "image"
     print(f"selftest ok · {len(store.commits)} commits · {len(packs)} meaning packs · next meaning {json.loads(store.files['loc/state.json'])['next_meaning']}")
 
 
@@ -852,6 +907,9 @@ def main(argv=None) -> int:
     ap.add_argument("--query", action="append", default=[], help="loc.gov search words (repeatable)")
     ap.add_argument("--collection", action="append", default=[], help="loc.gov collection slug (repeatable)")
     ap.add_argument("--books", action="store_true", help="searches: books / printed text only")
+    ap.add_argument("--format", default="", help="loc.gov: books film-and-videos audio photos maps manuscripts newspapers · "
+                                                 "Internet Archive: movies audio texts image")
+    ap.add_argument("--ia", action="append", default=[], help="Internet Archive search words (repeatable)")
     ap.add_argument("--items", type=int, default=10, help="documents to absorb this run")
     ap.add_argument("--max-pages", type=int, default=20)
     ap.add_argument("--repo", default=REPO)
@@ -871,9 +929,11 @@ def main(argv=None) -> int:
     if a.status:
         print(json.dumps(status(store), indent=1)[:4000])
         return 0
-    sources = [f"q:{q}" + (L.BOOKS_TAG if a.books else "") for q in a.query] + list(a.collection)
+    fmt = "books" if a.books and not a.format else a.format
+    sources = ([AR.make_src("loc", "query", q, fmt) for q in a.query] + list(a.collection)
+               + [AR.make_src("ia", "query", q, fmt) for q in a.ia])
     if not sources:
-        ap.error("give at least one --query or --collection")
+        ap.error("give at least one --query, --collection or --ia")
     if hasattr(L, "no_console_freeze"):
         try:
             L.no_console_freeze()

@@ -9,6 +9,11 @@ const view = $("#view");
 const store = { get(k, d) { try { return localStorage.getItem("alexandria." + k) ?? d; } catch (e) { return d; } },
                 set(k, v) { try { localStorage.setItem("alexandria." + k, v); } catch (e) {} } };
 const state = { level: store.get("level", "deeper"), nums: store.get("nums", "0") === "1", slug: null };
+const FMT = { video: ["▶", "Video"], audio: ["♪", "Audio"], image: ["▣", "Photo"], map: ["⌖", "Map"], manuscript: ["✎", "Manuscript"],
+  newspaper: ["▤", "Newspaper"], book: ["❏", "Book"], text: ["¶", "Text"] };
+const fmtTag = f => FMT[f] ? `${FMT[f][0]} ${FMT[f][1]}` : "";
+const thumbHtml = e => e.th ? `<div class="thumb" style="background-image:url('${esc(e.th)}')">${e.fm === "video" || e.fm === "audio" ? `<b>${FMT[e.fm][0]}</b>` : ""}</div>` : "";
+const srcCard = e => `<a class="card${e.th ? " has-thumb" : ""}" href="${srcHref(e)}">${thumbHtml(e)}<span class="meta">${esc([fmtTag(e.fm), e.d || yearTxt(e.y)].filter(Boolean).join(" · "))}</span><h3>${esc(e.t)}</h3><p>${esc(e.section.title)}${e.ar && e.ar !== "loc.gov" ? " · " + esc(e.ar) : ""}${e.n ? " · " + e.n.toLocaleString() + " sentences" : ""}</p></a>`;
 const yearTxt = y => y == null ? "" : y < 0 ? `${-y} BC` : String(y);
 
 // ------------------------------------------------------------------ chrome: level, numbers, theme
@@ -79,6 +84,7 @@ async function route() {
     else if (parts[0] === "timeline") await timeline(p.get("y"));
     else if (parts[0] === "atlas") await atlas(p.get("a"));
     else if (parts[0] === "sources") await showSources();
+    else if (parts[0] === "media") await mediaPage(p.get("f") || "");
     else if (parts[0] === "section") await showSources(parts[1]);
     else if (parts[0] === "src") await showSource(parts[1], +parts[2], +parts[3]);
     else if (parts[0] === "quiz") await quizPage(p.get("a"), p.get("s"));
@@ -125,7 +131,7 @@ async function home() {
     <section class="section"><div class="row-head"><h2>Through time</h2><a href="#/timeline">Open the timeline →</a></div>
       <div class="strip">${dated.map(a => `<a href="#/a/${a.slug}" style="--accent:${C.subj(a.s).c}"><b>${yearTxt(a.y)}</b><span>${esc(a.t)}</span></a>`).join("")}</div></section>
     <section class="section"><div class="row-head"><h2>From the Library of Congress</h2><a href="#/sources">All sources →</a></div>
-      ${srcs.length ? `<div class="grid">${srcs.slice(-6).reverse().map(e => `<a class="card" href="${srcHref(e)}"><span class="meta">${esc(e.section.title)} · ${esc(e.d || yearTxt(e.y))}</span><h3>${esc(e.t)}</h3><p>${(e.n || 0).toLocaleString()} sentences</p></a>`).join("")}</div>`
+      ${srcs.length ? `<div class="grid">${srcs.slice(-6).reverse().map(srcCard).join("")}</div>`
         : `<div class="empty">No primary sources absorbed yet. On base1, open the COG Absorber and press ABSORB NOW. They appear here on their own.</div>`}</section>`;
 }
 
@@ -312,7 +318,7 @@ async function showSources(secId) {
   const secs = (await C.sections()).filter(s => s.id !== "encyclopedia");
   const srcs = await C.sources();
   if (!secId) {
-    view.innerHTML = `<p class="kicker">Primary sources</p><h1>From the Library of Congress</h1><p class="lead">${esc(C.TRUST)}</p>
+    view.innerHTML = `<p class="kicker">Primary sources</p><h1>From the archives</h1><p class="lead">Texts, films, recordings, photographs and maps from the Library of Congress and the Internet Archive. <a href="#/media">Browse the media →</a></p><p class="lead">${esc(C.TRUST)}</p>
       <div class="grid section" style="margin-top:20px">${secs.length ? secs.map(s => `<a class="card" href="#/section/${encodeURIComponent(s.id)}"><span class="meta">Section</span><h3>${esc(s.title)}</h3><p>${(s.docs || 0).toLocaleString()} documents · ${(s.sentences || 0).toLocaleString()} sentences</p></a>`).join("")
         : `<div class="empty">Nothing absorbed yet. Use the COG Absorber on base1.</div>`}</div>`;
     return;
@@ -320,7 +326,32 @@ async function showSources(secId) {
   const s = secs.find(x => x.id === secId);
   const list = srcs.filter(e => e.section.id === secId).sort((a, b) => (a.y || 9999) - (b.y || 9999));
   view.innerHTML = `<div class="crumbs"><a href="#/sources">Sources</a> › ${esc(s ? s.title : secId)}</div><h1 style="margin-bottom:18px">${esc(s ? s.title : secId)}</h1>
-    <div class="grid">${list.map(e => `<a class="card" href="${srcHref(e)}"><span class="meta">${esc(e.d || yearTxt(e.y))}</span><h3>${esc(e.t)}</h3><p>${(e.n || 0).toLocaleString()} sentences</p></a>`).join("") || `<div class="empty">No documents yet.</div>`}</div>`;
+    <div class="grid">${list.map(srcCard).join("") || `<div class="empty">No documents yet.</div>`}</div>`;
+}
+// ------------------------------------------------------------------ media: films, recordings, photographs, maps
+async function mediaPage(f) {
+  const all = (await C.sources()).filter(e => e.fm && e.fm !== "text" && e.fm !== "book" && (e.th || e.mv));
+  const counts = {};
+  all.forEach(e => counts[e.fm] = (counts[e.fm] || 0) + 1);
+  const list = all.filter(e => !f || e.fm === f).sort((a, b) => (a.y || 9999) - (b.y || 9999));
+  view.innerHTML = `<p class="kicker">Media</p><h1>Film, sound and pictures</h1>
+    <p class="lead">Recordings and images play straight from the archive that holds them. The library keeps their catalogue text, captions and transcripts as COG, so the tutor and search can use them.</p>
+    <div class="tl-controls">${["", ...Object.keys(FMT).filter(k => counts[k])].map(k => `<button class="${k === f ? "on" : ""}" onclick="location.hash='#/media${k ? "?f=" + k : ""}'">${k ? fmtTag(k) + " · " + counts[k] : "Everything · " + all.length}</button>`).join("")}</div>
+    <div class="grid media-grid">${list.map(srcCard).join("") || `<div class="empty">No media absorbed yet. In the COG Absorber, pick a format (Video, Audio, Photos, Maps) when you add a source.</div>`}</div>`;
+}
+function player(d) {
+  const m = d.media || [];
+  const vids = m.filter(x => x.type === "video"), auds = m.filter(x => x.type === "audio"), imgs = m.filter(x => x.type === "image");
+  const caps = m.filter(x => x.type === "caption" && /\.vtt(\?|$)/i.test(x.url));
+  const track = caps.map((c, i) => `<track kind="captions" src="${esc(c.url)}" srclang="en" label="Captions"${i ? "" : " default"}>`).join("");
+  let h = "";
+  if (vids.length) h += `<video class="player" controls preload="metadata" playsinline ${imgs[0] || d.thumb ? `poster="${esc((imgs[0] || {}).url || d.thumb)}"` : ""}>${vids.map(v => `<source src="${esc(v.url)}"${v.mime ? ` type="${esc(v.mime)}"` : ""}>`).join("")}${track}</video>`;
+  else if (auds.length) h += `<div class="audio-wrap">${d.thumb ? `<img src="${esc(d.thumb)}" alt="">` : ""}<audio class="player" controls preload="metadata">${auds.map(a => `<source src="${esc(a.url)}"${a.mime ? ` type="${esc(a.mime)}"` : ""}>`).join("")}</audio></div>`;
+  else if (imgs.length) h += `<figure class="gallery"><a href="${esc(imgs[0].url)}" target="_blank" rel="noopener"><img id="bigimg" src="${esc(imgs[0].url)}" alt="${esc(d.title)}"></a>
+    ${imgs.length > 1 ? `<div class="thumbs">${imgs.map(x => `<img src="${esc(x.url)}" alt="" data-src="${esc(x.url)}">`).join("")}</div>` : ""}</figure>`;
+  const pdf = m.find(x => x.type === "pdf");
+  if (pdf) h += `<p class="fine"><a href="${esc(pdf.url)}" target="_blank" rel="noopener">Open the scanned pages (PDF) ↗</a></p>`;
+  return h ? `<div class="media-box">${h}</div>` : "";
 }
 async function showSource(secId, f, i) {
   const sec = (await C.sections()).find(s => s.id === secId);
@@ -328,9 +359,12 @@ async function showSource(secId, f, i) {
   const d = pack.docs[i];
   const paras = await C.decode(d.seq);
   view.innerHTML = `<div class="crumbs"><a href="#/sources">Sources</a> › <a href="#/section/${encodeURIComponent(secId)}">${esc(sec.title)}</a></div>
-    <p class="kicker">Primary source · ${esc(d.date || "")}</p><h1>${esc(d.title)}</h1>
-    <div class="art-actions" style="margin-top:14px"><button class="pill" id="read">▶ Read to me</button><a class="pill" href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Original at loc.gov ↗</a></div>
+    <p class="kicker">${esc([fmtTag(d.format) || "Primary source", d.date, d.archive && d.archive !== "loc.gov" ? d.archive : ""].filter(Boolean).join(" · "))}</p><h1>${esc(d.title)}</h1>
+    ${player(d)}
+    <div class="art-actions" style="margin-top:14px"><button class="pill" id="read">▶ Read to me</button><a class="pill" href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Original at ${esc(d.archive || "loc.gov")} ↗</a></div>
+    ${d.text_from && d.text_from !== "fulltext" ? `<p class="fine">${d.text_from === "captions" ? "Transcript from the recording's captions" : "Catalogue record (no transcript online yet)"} · stored as COG addresses</p>` : ""}
     <div class="doc" id="text">${prose(paras, false)}</div>`;
+  view.querySelectorAll(".thumbs img").forEach(t => t.onclick = () => { $("#bigimg").src = t.dataset.src; $("#bigimg").parentElement.href = t.dataset.src; });
   $("#text").onclick = e => { const s = e.target.closest(".s"); if (s && state.nums) location.hash = "#/m/" + s.dataset.a; };
   $("#read").onclick = () => speak($("#text"), $("#read"));
 }

@@ -22,6 +22,7 @@ from urllib.parse import quote_plus
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cog_absorber as A        # noqa: E402
+import archives as AR           # noqa: E402
 
 OLLAMA = "http://127.0.0.1:11434"
 PREFERRED = ["gpt-oss:20b", "qwen3.6:27b", "qwen2.5:14b", "hermes3:8b", "llama3.1:latest", "llama3.2:latest", "mistral:latest"]
@@ -31,6 +32,8 @@ SYSTEM = f"""You are the Library Desk inside PXD2's COG Absorber on base1. You h
 append-only library of meanings on GitHub (PxD2/cog). Every distinct meaning has one global meaning-id (absorbed ones from
 1000); every exact sentence under it has a variant index. The address (meaning-id, variant-index) is written "1042.3".
 Documents are held in library sections (groups); each section is stored in core (PxD2/cog) or its own repo.
+Sources: Library of Congress and the Internet Archive, any format. Video, audio and photos are kept as their catalogue
+text, captions/transcripts (as COG) plus links to play them at the archive — the recordings themselves are never copied.
 {A.TRUST}
 Rules:
 - Use the tools to check facts; never invent meaning-ids, counts, or loc.gov items.
@@ -181,11 +184,15 @@ class Desk:
             t("list_documents", "Documents already absorbed, optionally only one section, optionally filtered by words in the title.",
               {"section": S, "title_contains": S}),
             t("read_document", "Read an absorbed document back from its addresses (first part).", {"title_contains": S}, ["title_contains"]),
-            t("search_loc", "Search loc.gov for items (title, date, whether text is likely online). Read-only.", {"query": S, "books_only": {"type": "boolean"}}, ["query"]),
+            t("search_loc", "Search loc.gov for items (title, date, formats online). Read-only. format: books, film-and-videos, audio, photos, maps, manuscripts, newspapers.",
+              {"query": S, "format": S, "books_only": {"type": "boolean"}}, ["query"]),
+            t("search_internet_archive", "Search the Internet Archive (public domain / open licence first). Read-only. format: movies, audio, texts, image.",
+              {"query": S, "format": S}, ["query"]),
             t("find_collections", "Find loc.gov collections (slugs) matching words. Read-only.", {"words": S}, ["words"]),
             t("new_section", "Create a library section. store = 'core' or 'owner/repo'.", {"title": S, "store": S}, ["title"]),
-            t("add_source", "Add a loc.gov source to the window. kind = 'query' or 'collection'; section = section id or title.",
-              {"kind": S, "value": S, "section": S}, ["kind", "value", "section"]),
+            t("add_source", "Add a source to the window. archive = 'loc' or 'ia'; kind = 'query' or 'collection' (loc only); "
+              "format optional (loc: books, film-and-videos, audio, photos, maps, manuscripts, newspapers; ia: movies, audio, texts, image); section = section id or title.",
+              {"archive": S, "kind": S, "value": S, "format": S, "section": S}, ["kind", "value", "section"]),
             t("propose_absorb", "Prepare an absorb run for Chad to approve with the Run it button. Nothing runs until he does.",
               {"sources": {"type": "array", "items": S, "description": "source values (search words or collection slugs) already in the window"},
                "documents": I, "dry_run": {"type": "boolean"}}, ["sources", "documents"]),
@@ -269,9 +276,9 @@ class Desk:
         self.fetcher = f
         return f.get_json(url)
 
-    def t_search_loc(self, query: str, books_only: bool = False):
-        fa = "&fa=original-format:book" if books_only else ""
-        data = self._get(f"{A.L.BASE}/search/?q={quote_plus(query)}{fa}&fo=json&c=10")
+    def t_search_loc(self, query: str, format: str = "", books_only: bool = False):
+        fmt = "books" if books_only and not format else format
+        data = self._get(AR.LOC(None, 10).start_url(AR.make_src("loc", "query", query, fmt if fmt in AR.LOC_FORMATS else "")))
         if not isinstance(data, dict):
             return "loc.gov did not answer — try again in a minute"
         out = []
@@ -279,7 +286,17 @@ class Desk:
             fmt = A.L.as_text(r.get("online_format") or r.get("online-format"))
             out.append({"title": A.L.as_text(r.get("title"))[:120], "date": A.L.as_text(r.get("date"))[:20],
                         "online": fmt[:60], "id": A.L.as_text(r.get("id"))})
-        return {"query": query, "total": (data.get("pagination") or {}).get("of"), "results": out}
+        return {"query": query, "format": fmt, "total": (data.get("pagination") or {}).get("of"), "results": out}
+
+    def t_search_internet_archive(self, query: str, format: str = ""):
+        url = AR.IA(None).start_url(AR.make_src("ia", "query", query, format if format in AR.IA_FORMATS else ""))
+        data = self._get(url.replace("rows=25", "rows=10"))
+        if not isinstance(data, dict):
+            return "archive.org did not answer — try again in a minute"
+        docs = (data.get("response") or {}).get("docs") or []
+        return {"query": query, "total": (data.get("response") or {}).get("numFound"),
+                "results": [{"id": d.get("identifier"), "title": A.L.as_text(d.get("title"))[:120], "year": d.get("year") or d.get("date"),
+                             "type": d.get("mediatype"), "open_licence": bool(d.get("licenseurl"))} for d in docs[:10]]}
 
     def t_find_collections(self, words: str):
         data = self._get(f"{A.L.BASE}/collections/?q={quote_plus(words)}&fo=json&c=15")
@@ -296,10 +313,10 @@ class Desk:
     def t_new_section(self, title: str, store: str = "core"):
         return self.h["new_section"](title, store or "core") if "new_section" in self.h else "the window is not attached"
 
-    def t_add_source(self, kind: str, value: str, section: str):
+    def t_add_source(self, kind: str, value: str, section: str, archive: str = "loc", format: str = ""):
         if kind not in ("query", "collection"):
             return "kind must be query or collection"
-        return self.h["add_source"](kind, value, section) if "add_source" in self.h else "the window is not attached"
+        return self.h["add_source"](kind, value, section, archive, format) if "add_source" in self.h else "the window is not attached"
 
     def t_propose_absorb(self, sources: list, documents: int = 10, dry_run: bool = False):
         plan = {"sources": [str(x) for x in sources], "documents": max(1, min(int(documents), 500)), "dry_run": bool(dry_run)}
@@ -375,7 +392,7 @@ def selftest() -> None:
     reader = Reader(store)
     added, proposed = [], []
     hooks = {"sources": lambda: [{"value": "test", "section": "reformers", "on": True}],
-             "add_source": lambda k, v, s: (added.append((k, v, s)), f"added {v} to {s}")[1],
+             "add_source": lambda k, v, s, a="loc", f="": (added.append((k, v, s)), f"added {v} to {s}")[1],
              "new_section": lambda t, s: f"section {t} in {s}",
              "propose": lambda plan: (proposed.append(plan), "proposed — waiting for Chad to press Run it")[1],
              "log_tail": lambda n: "last line"}

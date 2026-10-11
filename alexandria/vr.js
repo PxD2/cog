@@ -66,8 +66,12 @@ export async function enter(host, opts = {}) {
   arts.forEach(a => (bySub[a.s] = bySub[a.s] || []).push(a));
   const subs = Object.keys(C.SUBJECTS).filter(s => bySub[s]);
   const pickables = [floor, orb];
+  const media = (await C.sources().catch(() => [])).filter(e => ["video", "audio", "image", "map"].includes(e.fm) && (e.th || e.mv)).slice(-12);
+  const slots = subs.length + (media.length ? 1 : 0);
+  let screen = null;
+  if (media.length) screen = buildScreeningRoom(subs.length / slots * Math.PI * 2);
   subs.forEach((s, k) => {
-    const ang = k / subs.length * Math.PI * 2;
+    const ang = k / slots * Math.PI * 2;
     const g = new THREE.Group();
     g.position.set(Math.cos(ang) * (RAD - 1.6), 0, Math.sin(ang) * (RAD - 1.6));
     g.lookAt(0, 0, 0);
@@ -89,6 +93,63 @@ export async function enter(host, opts = {}) {
       g.add(book); pickables.push(book);
     });
   });
+
+  // ---- screening room: films, recordings, photographs from the archives (streamed, never copied)
+  function buildScreeningRoom(ang) {
+    const g = new THREE.Group();
+    g.position.set(Math.cos(ang) * (RAD - 1.4), 0, Math.sin(ang) * (RAD - 1.4));
+    g.lookAt(0, 0, 0);
+    scene.add(g);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.1, 0.12), new THREE.MeshStandardMaterial({ color: 0x14110b, roughness: 0.6 }));
+    frame.position.set(0, 2.55, -0.1); g.add(frame);
+    const scrMat = new THREE.MeshBasicMaterial({ color: 0x0b0d12 });
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 1.86), scrMat);
+    scr.position.set(0, 2.55, -0.03); g.add(scr);
+    g.add(label("▶  Film, Sound & Pictures", 2.6, 0.34, 0, 3.85, 0, new THREE.Color(0xd4ad3b), 58));
+    const loader = new THREE.TextureLoader(); loader.setCrossOrigin("anonymous");
+    media.forEach((e, i) => {
+      const row = Math.floor(i / 6), c = i % 6;
+      const mat = new THREE.MeshBasicMaterial({ color: 0x2a3140 });
+      const tile = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), mat);
+      tile.position.set(-1.35 + c * 0.54, 1.18 - row * 0.42, 0.02);
+      tile.userData.media = e;
+      if (e.th) loader.load(e.th, t => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.color.set(0xffffff); mat.needsUpdate = true; }, undefined, () => {});
+      g.add(tile); pickables.push(tile);
+      if (e.fm === "video" || e.fm === "audio") { const b = label(e.fm === "video" ? "▶" : "♪", 0.1, 0.1, tile.position.x - 0.18, tile.position.y - 0.11, 0.03, null, 70); g.add(b); }
+    });
+    const stand = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.0, 0.3), new THREE.MeshStandardMaterial({ color: 0x4a3a26, roughness: 0.75 }));
+    stand.position.set(0, 0.5, -0.2); g.add(stand);
+    const glow = new THREE.PointLight(0xd4ad3b, 10, 6, 2); glow.position.set(0, 2.5, 1.5); g.add(glow);
+    let video = null, audio = null;
+    function stop() { if (video) { video.pause(); video.removeAttribute("src"); video.load(); video = null; } if (audio) { audio.pause(); audio = null; } }
+    async function show(e) {
+      stop();
+      const sec = e.section;
+      const d = (await C.getFile(sec.files[e.f - 1], sec.base)).docs[e.i];
+      const m = d.media || [];
+      const v = m.find(x => x.type === "video"), a = m.find(x => x.type === "audio"), img = m.find(x => x.type === "image");
+      const still = (url) => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; scrMat.map = t; scrMat.color.set(0xffffff); scrMat.needsUpdate = true; },
+        undefined, () => message(d, "This picture can't be shown in 3D. Open it on the page."));
+      if (v) {
+        video = Object.assign(document.createElement("video"), { crossOrigin: "anonymous", playsInline: true, src: v.url });
+        video.addEventListener("error", () => message(d, "This film plays on the page, not on the 3D screen. Open it from Media."), { once: true });
+        const vt = new THREE.VideoTexture(video); vt.colorSpace = THREE.SRGBColorSpace;
+        video.addEventListener("loadeddata", () => { scrMat.map = vt; scrMat.color.set(0xffffff); scrMat.needsUpdate = true; }, { once: true });
+        video.play().catch(() => {});
+      } else if (a) {
+        audio = new Audio(a.url); audio.play().catch(() => {});
+        if (img || d.thumb) still((img || {}).url || d.thumb);
+      } else if (img || d.thumb) still((img || {}).url || d.thumb);
+      message(d, null);
+    }
+    function message(d, note) {
+      const paras = d.title + (d.date ? ` (${d.date})` : "") + (note ? "\n\n" + note : "") + "\n\n" + (d.text_from === "captions" ? "Transcript available on the panel's page." : "");
+      if (note) { scrMat.map = null; scrMat.color.set(0x0b0d12); scrMat.needsUpdate = true; }
+      hallNote(paras);
+    }
+    return { show, stop };
+  }
+  function hallNote(t) { const h = host.querySelector("#hallHint"); if (h) h.textContent = t.split("\n").filter(Boolean)[0] + (t.includes("plays on the page") ? " — plays on the page, not on the 3D screen" : ""); }
 
   // ---- reading panel
   const panel = makePanel();
@@ -124,6 +185,7 @@ export async function enter(host, opts = {}) {
     const o = hit.object;
     if (o.userData.btn) return panel.press(o.userData.btn);
     if (o.userData.slug) return panel.open(o.userData.slug, o);
+    if (o.userData.media && screen) return screen.show(o.userData.media);
     if (o.userData.orb) return panel.tutor();
     if (o.userData.floor) { const p = hit.point; const r = Math.hypot(p.x, p.z); const k = Math.min(1, (RAD - 2.6) / r); target = new THREE.Vector3(p.x * k, 0, p.z * k); }
   }
@@ -222,8 +284,8 @@ export async function enter(host, opts = {}) {
     if (target) { rig.position.lerp(target, Math.min(1, dt * 4)); if (rig.position.distanceTo(target) < 0.02) target = null; }
     renderer.render(scene, camera);
   });
-  R = { renderer, host, vrb, onExit: opts.onExit, cleanup: () => { removeEventListener("resize", onResize); removeEventListener("keydown", kd); removeEventListener("keyup", ku); } };
-  window.__hall = { scene, camera, panel, rig };   // for testing
+  R = { renderer, host, vrb, onExit: opts.onExit, cleanup: () => { if (screen) screen.stop(); removeEventListener("resize", onResize); removeEventListener("keydown", kd); removeEventListener("keyup", ku); } };
+  window.__hall = { scene, camera, panel, rig, screen };   // for testing
 }
 
 export function exit() {
