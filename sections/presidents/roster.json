@@ -1,0 +1,484 @@
+{
+ "name": "presidents/roster",
+ "ver": 1,
+ "section": "presidents",
+ "as_of": "2026",
+ "note": "One entry per presidency (Cleveland and Trump each appear twice, as the official numbering counts them).",
+ "presidents": [
+  {
+   "n": 1,
+   "name": "George Washington",
+   "short": "Washington",
+   "from": 1789,
+   "to": 1797,
+   "party": "None",
+   "state": "Virginia",
+   "note": "Led the Continental Army, then became the first president and set the two-term tradition."
+  },
+  {
+   "n": 2,
+   "name": "John Adams",
+   "short": "Adams",
+   "from": 1797,
+   "to": 1801,
+   "party": "Federalist",
+   "state": "Massachusetts",
+   "note": "Helped write the case for independence and was the first president to live in the White House."
+  },
+  {
+   "n": 3,
+   "name": "Thomas Jefferson",
+   "short": "Jefferson",
+   "from": 1801,
+   "to": 1809,
+   "party": "Democratic-Republican",
+   "state": "Virginia",
+   "note": "Wrote the Declaration of Independence and bought the Louisiana Territory."
+  },
+  {
+   "n": 4,
+   "name": "James Madison",
+   "short": "Madison",
+   "from": 1809,
+   "to": 1817,
+   "party": "Democratic-Republican",
+   "state": "Virginia",
+   "note": "Called the Father of the Constitution; led the country in the War of 1812."
+  },
+  {
+   "n": 5,
+   "name": "James Monroe",
+   "short": "Monroe",
+   "from": 1817,
+   "to": 1825,
+   "party": "Democratic-Republican",
+   "state": "Virginia",
+   "note": "Warned Europe to stay out of the Americas in the Monroe Doctrine."
+  },
+  {
+   "n": 6,
+   "name": "John Quincy Adams",
+   "short": "J. Q. Adams",
+   "from": 1825,
+   "to": 1829,
+   "party": "Democratic-Republican",
+   "state": "Massachusetts",
+   "note": "Son of John Adams; later fought slavery in Congress."
+  },
+  {
+   "n": 7,
+   "name": "Andrew Jackson",
+   "short": "Jackson",
+   "from": 1829,
+   "to": 1837,
+   "party": "Democratic",
+   "state": "Tennessee",
+   "note": "War of 1812 general who called himself the people's president."
+  },
+  {
+   "n": 8,
+   "name": "Martin Van Buren",
+   "short": "Van Buren",
+   "from": 1837,
+   "to": 1841,
+   "party": "Democratic",
+   "state": "New York",
+   "note": "The first president born a citizen of the United States."
+  },
+  {
+   "n": 9,
+   "name": "William Henry Harrison",
+   "short": "W. H. Harrison",
+   "from": 1841,
+   "to": 1841,
+   "party": "Whig",
+   "state": "Ohio",
+   "note": "Gave the longest inaugural address and served only 31 days."
+  },
+  {
+   "n": 10,
+   "name": "John Tyler",
+   "short": "Tyler",
+   "from": 1841,
+   "to": 1845,
+   "party": "Whig",
+   "state": "Virginia",
+   "note": "The first vice president to become president when a president died.",
+   "no_inaugural": "Became president when William Henry Harrison died, so he gave no inaugural address."
+  },
+  {
+   "n": 11,
+   "name": "James K. Polk",
+   "short": "Polk",
+   "from": 1845,
+   "to": 1849,
+   "party": "Democratic",
+   "state": "Tennessee",
+   "note": "The country grew west to the Pacific while he was president."
+  },
+  {
+   "n": 12,
+   "name": "Zachary Taylor",
+   "short": "Taylor",
+   "from": 1849,
+   "to": 1850,
+   "party": "Whig",
+   "state": "Louisiana",
+   "note": "A general in the Mexican–American War who died in office."
+  },
+  {
+   "n": 13,
+   "name": "Millard Fillmore",
+   "short": "Fillmore",
+   "from": 1850,
+   "to": 1853,
+   "party": "Whig",
+   "state": "New York",
+   "note": "Became president when Taylor died; signed the Compromise of 1850.",
+   "no_inaugural": "Became president when Zachary Taylor died, so he gave no inaugural address."
+  },
+  {
+   "n": 14,
+   "name": "Franklin Pierce",
+   "short": "Pierce",
+   "from": 1853,
+   "to": 1857,
+   "party": "Democratic",
+   "state": "New Hampshire",
+   "note": "Signed the Kansas–Nebraska Act, which deepened the split over slavery."
+  },
+  {
+   "n": 15,
+   "name": "James Buchanan",
+   "short": "Buchanan",
+   "from": 1857,
+   "to": 1861,
+   "party": "Democratic",
+   "state": "Pennsylvania",
+   "note": "President as Southern states began to leave the Union."
+  },
+  {
+   "n": 16,
+   "name": "Abraham Lincoln",
+   "short": "Lincoln",
+   "from": 1861,
+   "to": 1865,
+   "party": "Republican",
+   "state": "Illinois",
+   "note": "Led the Union through the Civil War and worked to end slavery."
+  },
+  {
+   "n": 17,
+   "name": "Andrew Johnson",
+   "short": "A. Johnson",
+   "from": 1865,
+   "to": 1869,
+   "party": "National Union",
+   "state": "Tennessee",
+   "note": "Became president after Lincoln was killed; the first president impeached.",
+   "no_inaugural": "Became president when Lincoln was killed, so he gave no inaugural address."
+  },
+  {
+   "n": 18,
+   "name": "Ulysses S. Grant",
+   "short": "Grant",
+   "from": 1869,
+   "to": 1877,
+   "party": "Republican",
+   "state": "Illinois",
+   "note": "The Union's top general in the Civil War."
+  },
+  {
+   "n": 19,
+   "name": "Rutherford B. Hayes",
+   "short": "Hayes",
+   "from": 1877,
+   "to": 1881,
+   "party": "Republican",
+   "state": "Ohio",
+   "note": "His presidency ended Reconstruction in the South."
+  },
+  {
+   "n": 20,
+   "name": "James A. Garfield",
+   "short": "Garfield",
+   "from": 1881,
+   "to": 1881,
+   "party": "Republican",
+   "state": "Ohio",
+   "note": "Shot a few months into his term; died that September."
+  },
+  {
+   "n": 21,
+   "name": "Chester A. Arthur",
+   "short": "Arthur",
+   "from": 1881,
+   "to": 1885,
+   "party": "Republican",
+   "state": "New York",
+   "note": "Signed a law so many government jobs went to people who passed tests.",
+   "no_inaugural": "Became president when Garfield died, so he gave no inaugural address."
+  },
+  {
+   "n": 22,
+   "name": "Grover Cleveland",
+   "short": "Cleveland",
+   "from": 1885,
+   "to": 1889,
+   "party": "Democratic",
+   "state": "New York",
+   "note": "The only president to serve two terms that were not back to back (22nd and 24th)."
+  },
+  {
+   "n": 23,
+   "name": "Benjamin Harrison",
+   "short": "B. Harrison",
+   "from": 1889,
+   "to": 1893,
+   "party": "Republican",
+   "state": "Indiana",
+   "note": "Grandson of William Henry Harrison; six states joined while he was president."
+  },
+  {
+   "n": 24,
+   "name": "Grover Cleveland",
+   "short": "Cleveland",
+   "from": 1893,
+   "to": 1897,
+   "party": "Democratic",
+   "state": "New York",
+   "note": "Back for a second, separate term — counted twice."
+  },
+  {
+   "n": 25,
+   "name": "William McKinley",
+   "short": "McKinley",
+   "from": 1897,
+   "to": 1901,
+   "party": "Republican",
+   "state": "Ohio",
+   "note": "President during the Spanish–American War; shot in 1901."
+  },
+  {
+   "n": 26,
+   "name": "Theodore Roosevelt",
+   "short": "T. Roosevelt",
+   "from": 1901,
+   "to": 1909,
+   "party": "Republican",
+   "state": "New York",
+   "note": "Protected millions of acres of forests and parks; started the Panama Canal."
+  },
+  {
+   "n": 27,
+   "name": "William Howard Taft",
+   "short": "Taft",
+   "from": 1909,
+   "to": 1913,
+   "party": "Republican",
+   "state": "Ohio",
+   "note": "Later became Chief Justice of the Supreme Court."
+  },
+  {
+   "n": 28,
+   "name": "Woodrow Wilson",
+   "short": "Wilson",
+   "from": 1913,
+   "to": 1921,
+   "party": "Democratic",
+   "state": "New Jersey",
+   "note": "Led the country in World War I."
+  },
+  {
+   "n": 29,
+   "name": "Warren G. Harding",
+   "short": "Harding",
+   "from": 1921,
+   "to": 1923,
+   "party": "Republican",
+   "state": "Ohio",
+   "note": "Promised a return to normal life after the war; died in office."
+  },
+  {
+   "n": 30,
+   "name": "Calvin Coolidge",
+   "short": "Coolidge",
+   "from": 1923,
+   "to": 1929,
+   "party": "Republican",
+   "state": "Massachusetts",
+   "note": "Known as Silent Cal for saying few words."
+  },
+  {
+   "n": 31,
+   "name": "Herbert Hoover",
+   "short": "Hoover",
+   "from": 1929,
+   "to": 1933,
+   "party": "Republican",
+   "state": "California",
+   "note": "President when the Great Depression began."
+  },
+  {
+   "n": 32,
+   "name": "Franklin D. Roosevelt",
+   "short": "F. D. Roosevelt",
+   "from": 1933,
+   "to": 1945,
+   "party": "Democratic",
+   "state": "New York",
+   "note": "Elected four times; led through the Great Depression and World War II."
+  },
+  {
+   "n": 33,
+   "name": "Harry S. Truman",
+   "short": "Truman",
+   "from": 1945,
+   "to": 1953,
+   "party": "Democratic",
+   "state": "Missouri",
+   "note": "Ended World War II and helped rebuild Europe."
+  },
+  {
+   "n": 34,
+   "name": "Dwight D. Eisenhower",
+   "short": "Eisenhower",
+   "from": 1953,
+   "to": 1961,
+   "party": "Republican",
+   "state": "Kansas",
+   "note": "Commanded the D-Day invasion; built the interstate highways."
+  },
+  {
+   "n": 35,
+   "name": "John F. Kennedy",
+   "short": "Kennedy",
+   "from": 1961,
+   "to": 1963,
+   "party": "Democratic",
+   "state": "Massachusetts",
+   "note": "Set the goal of landing a person on the Moon."
+  },
+  {
+   "n": 36,
+   "name": "Lyndon B. Johnson",
+   "short": "L. B. Johnson",
+   "from": 1963,
+   "to": 1969,
+   "party": "Democratic",
+   "state": "Texas",
+   "note": "Signed the Civil Rights Act of 1964 and the Voting Rights Act of 1965."
+  },
+  {
+   "n": 37,
+   "name": "Richard Nixon",
+   "short": "Nixon",
+   "from": 1969,
+   "to": 1974,
+   "party": "Republican",
+   "state": "California",
+   "note": "Opened ties with China; the only president to resign."
+  },
+  {
+   "n": 38,
+   "name": "Gerald Ford",
+   "short": "Ford",
+   "from": 1974,
+   "to": 1977,
+   "party": "Republican",
+   "state": "Michigan",
+   "note": "The only president never elected president or vice president.",
+   "no_inaugural": "Became president when Nixon resigned; he spoke to the nation but gave no inaugural address."
+  },
+  {
+   "n": 39,
+   "name": "Jimmy Carter",
+   "short": "Carter",
+   "from": 1977,
+   "to": 1981,
+   "party": "Democratic",
+   "state": "Georgia",
+   "note": "Helped make peace between Egypt and Israel at Camp David."
+  },
+  {
+   "n": 40,
+   "name": "Ronald Reagan",
+   "short": "Reagan",
+   "from": 1981,
+   "to": 1989,
+   "party": "Republican",
+   "state": "California",
+   "note": "Former actor and governor; president as the Cold War neared its end."
+  },
+  {
+   "n": 41,
+   "name": "George H. W. Bush",
+   "short": "G. H. W. Bush",
+   "from": 1989,
+   "to": 1993,
+   "party": "Republican",
+   "state": "Texas",
+   "note": "President when the Berlin Wall fell and during the Gulf War."
+  },
+  {
+   "n": 42,
+   "name": "Bill Clinton",
+   "short": "Clinton",
+   "from": 1993,
+   "to": 2001,
+   "party": "Democratic",
+   "state": "Arkansas",
+   "note": "President during a long run of economic growth in the 1990s."
+  },
+  {
+   "n": 43,
+   "name": "George W. Bush",
+   "short": "G. W. Bush",
+   "from": 2001,
+   "to": 2009,
+   "party": "Republican",
+   "state": "Texas",
+   "note": "Son of George H. W. Bush; president on September 11, 2001."
+  },
+  {
+   "n": 44,
+   "name": "Barack Obama",
+   "short": "Obama",
+   "from": 2009,
+   "to": 2017,
+   "party": "Democratic",
+   "state": "Illinois",
+   "note": "The first African American president."
+  },
+  {
+   "n": 45,
+   "name": "Donald Trump",
+   "short": "Trump",
+   "from": 2017,
+   "to": 2021,
+   "party": "Republican",
+   "state": "New York",
+   "note": "Businessman who became president without holding office before."
+  },
+  {
+   "n": 46,
+   "name": "Joe Biden",
+   "short": "Biden",
+   "from": 2021,
+   "to": 2025,
+   "party": "Democratic",
+   "state": "Delaware",
+   "note": "Served 36 years in the Senate and was vice president before."
+  },
+  {
+   "n": 47,
+   "name": "Donald Trump",
+   "short": "Trump",
+   "from": 2025,
+   "to": null,
+   "party": "Republican",
+   "state": "Florida",
+   "note": "Returned for a second, separate term — counted twice, like Cleveland."
+  }
+ ]
+}

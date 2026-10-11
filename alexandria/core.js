@@ -137,12 +137,55 @@ export async function search(q, limit = 30) {
   if (!qw.length) return { articles: [], sentences: [], sources: [] };
   const arts = (await articles()).map(a => ({ a, s: score(qw, new Set(words(`${a.t} ${a.t} ${a.s || ""} ${a.sum || ""}`)), "") }))
     .filter(x => x.s > 0).sort((x, y) => y.s - x.s).slice(0, 12).map(x => x.a);
-  const sents = (await sentenceIndex()).map(x => ({ x, s: score(qw, x.w) })).filter(x => x.s > 0)
+  const pool = speechIdx ? (await sentenceIndex()).concat(speechIdx) : await sentenceIndex();
+  const sents = pool.map(x => ({ x, s: score(qw, x.w) })).filter(x => x.s > 0)
     .sort((a, b) => b.s - a.s).slice(0, limit).map(x => x.x);
   const srcs = (await sources()).map(e => ({ e, s: score(qw, new Set(words(e.t || ""))) })).filter(x => x.s > 0)
     .sort((a, b) => b.s - a.s).slice(0, 12).map(x => x.e);
   return { articles: arts, sentences: sents, sources: srcs };
 }
+
+// ---------------------------------------------------------------- Hall of Presidents
+let rosterP = null, speechesP = null, speechIdx = null;
+export function roster() {
+  if (!rosterP) rosterP = getFile("sections/presidents/roster.json").then(r => r.presidents || []).catch(() => []);
+  return rosterP;
+}
+export function speeches() {           // every speech in the presidents section, newest version per id
+  if (!speechesP) speechesP = (async () => {
+    const sec = (await sections()).find(s => s.id === "presidents");
+    if (!sec) return [];
+    const latest = new Map();
+    for (const e of await indexOf(sec)) latest.set(e.id, { ...e, section: sec });
+    const ros = await roster();
+    return [...latest.values()].map(e => {
+      if (!e.pr) {                      // absorbed speeches / recordings: match the president by name in the title
+        const hit = ros.slice().sort((a, b) => b.name.length - a.name.length).find(p => (e.t || "").includes(p.name));
+        if (hit) e.pr = hit.n;
+      }
+      return e;
+    });
+  })();
+  return speechesP;
+}
+export async function speech(f, i) {
+  const sec = (await sections()).find(s => s.id === "presidents");
+  const d = (await getFile(sec.files[f - 1], sec.base)).docs[i];
+  return { ...d, f, i, section: sec };
+}
+export async function speechIndex() {  // every sentence of every speech (loaded only when asked: the Hall or the tutor)
+  if (speechIdx) return speechIdx;
+  const list = await speeches(), ros = await roster(), out = [];
+  for (const e of list) {
+    const d = await speech(e.f, e.i);
+    const who = (ros.find(p => p.n === d.pres) || {}).name || "";
+    for (const p of await decode(d.seq)) for (const s of p)
+      out.push({ slug: `speech/${e.f}/${e.i}`, kind: "speech", title: d.title, who, pres: d.pres, level: "deeper", a: s.a, t: s.t, w: new Set(words(s.t)) });
+  }
+  speechIdx = out;
+  return out;
+}
+export const speechesLoaded = () => !!speechIdx;
 
 export const SUBJECTS = {
   "Civics & Government": { c: "#c9a227", i: "⚖" },

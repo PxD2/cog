@@ -92,6 +92,12 @@ QPushButton#run { background: #c9a227; color: #0c0e12; font-weight: 700; border:
 """
 
 
+def python_exe() -> str:
+    exe = Path(sys.executable)
+    alt = exe.with_name("python.exe")
+    return str(alt) if exe.name.lower() == "pythonw.exe" and alt.exists() else str(exe)
+
+
 # ------------------------------------------------------------------------------------------- settings
 def load_settings() -> dict:
     s = {"sources": [dict(kind=k, value=v, label=l, section=c, on=(i < 2)) for i, (k, v, l, c) in enumerate(PRESETS)],
@@ -408,7 +414,8 @@ class Window(QMainWindow):
         lg.addWidget(self.srcinfo, 2, 0, 1, 5)
         btns = QHBoxLayout()
         for text, fn in [("Refresh", self.refresh), ("Open Alexandria", lambda: webbrowser.open(SITE + "alexandria/")),
-                         ("Publish articles", self.publish_articles), ("Sync Obsidian", self.sync_vault),
+                         ("Publish articles", self.publish_articles), ("Publish presidents", self.publish_presidents),
+                         ("Publish 3D sets", self.publish_sets), ("Sync Obsidian", self.sync_vault),
                          ("Open repo on GitHub", lambda: webbrowser.open(f"https://github.com/{self.s['repo']}")),
                          ("Open log file", self.open_log)]:
             bb = QPushButton(text)
@@ -716,6 +723,33 @@ class Window(QMainWindow):
             msg = work()
             self.invoke(lambda: self.say(msg))
         threading.Thread(target=run, daemon=True).start()
+
+    def _run_script(self, title, argv):
+        """Run a helper script in the background and stream its output into the log."""
+        self.tabs.setCurrentIndex(0)
+        self.say("")
+        self.say(f"=== {title}")
+        def run():
+            try:
+                p = subprocess.Popen([python_exe(), "-u"] + argv, cwd=str(HERE), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     text=True, encoding="utf-8", errors="replace", creationflags=NOWIN)
+                for line in p.stdout:
+                    self.invoke(lambda l=line.rstrip(): self.say(l))
+                p.wait()
+                self.invoke(lambda: (self.refresh(), self.desk.reader.refresh(), self.sync_vault()))
+            except Exception as e:      # noqa: BLE001
+                self.invoke(lambda: self.say(f"failed: {e}"))
+        threading.Thread(target=run, daemon=True).start()
+
+    def publish_presidents(self):
+        corpus = HERE / "content" / "inaugural"
+        if not corpus.exists():
+            self.say(f"Put the inaugural corpus (1789-Washington.txt …) in {corpus}")
+            return
+        self._run_script("Publish the Hall of Presidents (roster + inaugural addresses)", ["publish_presidents.py", "--corpus", str(corpus)])
+
+    def publish_sets(self):
+        self._run_script("Publish the 3D sets and hero pictures", ["publish_sets.py"])
 
     def publish_articles(self):
         self.tabs.setCurrentIndex(0)

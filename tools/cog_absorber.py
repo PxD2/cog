@@ -476,7 +476,8 @@ class Library:
             f, pos = self._place(sec, entry)
             if i == 0:
                 media = meta.get("media") or []
-                self._index(sec, {"id": item_id, "k": "doc", "t": meta.get("title"), "y": int(ym.group(1)) if ym else None,
+                self._index(sec, {"id": item_id, "k": meta.get("kind") or "doc", "t": meta.get("title"), "y": int(ym.group(1)) if ym else None,
+                                  "pr": meta.get("pres"), "oc": meta.get("occasion"), "w": meta.get("words"),
                                   "d": meta.get("date"), "f": f, "i": pos, "n": n, "parts": len(parts) if len(parts) > 1 else None,
                                   "fm": meta.get("format"), "th": meta.get("thumb"), "ar": meta.get("archive"),
                                   "mv": sum(1 for m in media if m["type"] in ("video", "audio")) or None})

@@ -1,13 +1,13 @@
 {
  "name": "COG catalog",
- "updated": "2026-10-11T01:31:24+00:00",
+ "updated": "2026-10-11T02:54:01+00:00",
  "trust": "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.",
- "next_meaning": 1420,
+ "next_meaning": 6823,
  "totals": {
-  "meanings": 420,
-  "variants": 420,
-  "docs": 36,
-  "sentences": 420
+  "meanings": 5823,
+  "variants": 5829,
+  "docs": 96,
+  "sentences": 5870
  },
  "books": [
   {
@@ -36,8 +36,18 @@
    "kind": "meanings",
    "room": "core",
    "from": 1000,
-   "to": 1419,
+   "to": 4894,
    "cont": []
+  },
+  {
+   "file": "books/core-m-0002.json",
+   "kind": "meanings",
+   "room": "core",
+   "from": 4895,
+   "to": 6822,
+   "cont": [
+    4825
+   ]
   }
  ],
  "sections": [
@@ -53,6 +63,20 @@
    ],
    "index": [
     "sections/encyclopedia/index-0001.json"
+   ]
+  },
+  {
+   "id": "presidents",
+   "title": "Hall of Presidents",
+   "store": "core",
+   "base": "",
+   "docs": 60,
+   "sentences": 5450,
+   "files": [
+    "sections/presidents/docs-0001.json"
+   ],
+   "index": [
+    "sections/presidents/index-0001.json"
    ]
   }
  ]

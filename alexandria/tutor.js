@@ -22,6 +22,7 @@ function pick(sents, level, n) {
   return out;
 }
 
+const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 export async function answer(q, ctx = {}) {
   const text = q.trim();
   const low = text.toLowerCase();
@@ -48,6 +49,18 @@ export async function answer(q, ctx = {}) {
       actions: [{ label: "Show on the atlas", href: "#/atlas?a=" + focus.slug }, { label: "Read " + focus.t, href: "#/a/" + focus.slug }] };
   }
   const simple = /simpl|kid|easy|young|like i'?m|eli5/.test(low);
+  const ros = await C.roster().catch(() => []);
+  const who = ros.slice().sort((a, b) => b.name.length - a.name.length).find(p => low.includes(p.name.toLowerCase()) || low.includes(p.short.toLowerCase().replace(/^[a-z.\s]+ /, "")));
+  if (who && C.speechesLoaded()) {        // a question about a president: answer from his own words
+    const nameW = new Set(C.words(who.name + " " + who.short));
+    const qw = C.words(text).filter(w => !nameW.has(w) && !["say", "said", "says", "tell", "talk", "speech", "speak", "inaugural", "address", "president", "about", "did", "his"].includes(w));
+    const mine = (await C.speechIndex()).filter(s => ros.some(p => p.name === who.name && p.n === s.pres));
+    const hits = qw.length ? mine.map(x => ({ x, s: C.score(qw, x.w) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.x) : [];
+    if (hits.length) return { kind: "answer", text: `From ${who.name}'s own words:`, cites: hits,
+      actions: [{ label: `${who.name} in the Hall of Presidents`, href: "#/president/" + who.n }] };
+    if (!qw.length && mine.length) return { kind: "answer", text: `${who.name} — ${ord(who.n)} President, ${who.from}–${who.to ?? "today"}. ${who.note}`, cites: [],
+      actions: [{ label: "Hear his speeches in the Hall", href: "#/president/" + who.n }] };
+  }
   let sents = r.sentences;
   if (focus) {
     // stay on the article the question is about; other articles only when they match the question strongly
@@ -71,6 +84,7 @@ export async function answer(q, ctx = {}) {
   for (const s of r.sources.slice(0, 2)) res.actions.push({ label: "Primary source: " + (s.t || "").slice(0, 60), href: "#/src/" + encodeURIComponent(s.section.id) + "/" + s.f + "/" + s.i });
   if (focus && focus.y != null) res.actions.push({ label: "Timeline", href: "#/timeline?y=" + focus.y });
 
+  if (who) res.actions.unshift({ label: `${who.name} in the Hall of Presidents`, href: "#/president/" + who.n });
   const cfg = config();
   if (cfg.useModel && cfg.model) {
     try {

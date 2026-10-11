@@ -28,6 +28,20 @@ timeline, atlas, primary sources, media (films, recordings, photos, maps streame
 COG numbers stay hidden until you press `#`. Articles: `sections/encyclopedia/` (published by `tools/publish_articles.py`).
 Optional: the tutor can use base1's Ollama (start it with `OLLAMA_ORIGINS=https://pxd2.github.io`).
 
+## Hall of Presidents
+
+`#/presidents` in Alexandria: all 47 presidencies (`sections/presidents/roster.json`) and every inaugural address,
+1789–2025, stored as COG word for word (C-SPAN inaugural corpus via NLTK; public domain). Roll call, speeches read
+aloud with each sentence lit, the famous line of each speech, Who said it?, Order up!, longest and shortest speeches.
+In the 3D/VR Hall the gold doorway leads to the Presidents theater (47 pedestals, lectern, spotlight).
+
+## 3D sets (Blender → web/VR, and Unreal)
+
+`tools/blender/build_sets.py` builds the Great Hall rotunda and the Presidents theater procedurally, bakes them in
+Cycles, and exports `sets/*.glb` with named anchors that `alexandria/vr.js` fills with live content.
+`Build Alexandria Sets (RTX).bat` re-bakes at 2048 px / 256 samples on base1's GPU and also writes Unreal versions
+(`*_ue.glb`: colour + lights) for `tools/unreal/alexandria_unreal.py`, which builds Lumen levels in the ALEXANDERIA project.
+
 ## Live library
 
 https://pxd2.github.io/cog/

@@ -2,6 +2,7 @@
 // the numbers appear only when "#" is on. Nothing heavy loads until it is needed (map, 3D/VR hall).
 import * as C from "./core.js";
 import * as T from "./tutor.js";
+import * as P from "./presidents.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -55,12 +56,13 @@ async function suggest() {
   let h = "";
   if (m) h += `<h6>Address</h6><a href="#/m/${m[1]}${m[2] ? "." + m[2] : ""}">Meaning ${esc(v)}<small>open every exact sentence with this meaning</small></a>`;
   if (r.articles.length) h += "<h6>Articles</h6>" + r.articles.slice(0, 5).map(a => `<a href="#/a/${a.slug}">${esc(a.t)}<small>${esc(a.sum)}</small></a>`).join("");
-  if (r.sentences.length) h += "<h6>Sentences</h6>" + r.sentences.slice(0, 4).map(s => `<a href="#/a/${s.slug}?s=${s.a}">${esc(s.t)}<small>${esc(s.title)} · ${s.a}</small></a>`).join("");
+  if (r.sentences.length) h += "<h6>Sentences</h6>" + r.sentences.slice(0, 4).map(s => `<a href="${sentHref(s)}">${esc(s.t)}<small>${esc(s.title)} · ${s.a}</small></a>`).join("");
   if (r.sources.length) h += "<h6>Primary sources</h6>" + r.sources.slice(0, 3).map(srcLink).join("");
   h += `<a href="#/search?q=${encodeURIComponent(v)}"><small>All results for “${esc(v)}” · Enter</small></a>`;
   sugg.innerHTML = h;
   sugg.hidden = false;
 }
+const sentHref = s => s.kind === "speech" ? `#/${s.slug}?s=${s.a}` : `#/a/${s.slug}?s=${s.a}`;
 const srcHref = e => `#/src/${encodeURIComponent(e.section.id)}/${e.f}/${e.i}`;
 const srcLink = e => `<a href="${srcHref(e)}">${esc(e.t)}<small>${esc(e.section.title)} · ${esc(e.d || yearTxt(e.y))}</small></a>`;
 sugg.addEventListener("click", () => { sugg.hidden = true; q.value = ""; });
@@ -73,7 +75,9 @@ async function route() {
   const [path, qs] = h.split("?");
   const p = new URLSearchParams(qs || "");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === (parts[0] || "")));
+  const navKey = ["president", "speech"].includes(parts[0]) ? "presidents" : (parts[0] || "");
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === navKey));
+  document.body.dataset.page = { a: "article", m: "meaning", src: "media", section: "sources" }[parts[0]] || navKey || "home";
   state.slug = null;
   try {
     if (!parts.length) await home();
@@ -85,6 +89,7 @@ async function route() {
     else if (parts[0] === "atlas") await atlas(p.get("a"));
     else if (parts[0] === "sources") await showSources();
     else if (parts[0] === "media") await mediaPage(p.get("f") || "");
+    else if (parts[0] === "presidents" || parts[0] === "president" || parts[0] === "speech") await P.render(view, parts, p, { prose, state, ask: q => { openTutor(); ask(q); } });
     else if (parts[0] === "section") await showSources(parts[1]);
     else if (parts[0] === "src") await showSource(parts[1], +parts[2], +parts[3]);
     else if (parts[0] === "quiz") await quizPage(p.get("a"), p.get("s"));
@@ -108,7 +113,7 @@ async function home() {
   const fs = f ? C.subj(f.s) : null;
   const dated = arts.filter(a => a.y != null && a.y !== 0).sort((a, b) => a.y - b.y);
   view.innerHTML = `
-    <section class="hero">
+    <div class="hero-wrap"><section class="hero">
       <div>
         <p class="kicker">The People's Trust</p>
         <h1>Everything here is held in trust for the people.</h1>
@@ -124,7 +129,9 @@ async function home() {
       ${f ? `<a class="feature card" href="#/a/${f.slug}" style="--accent:${fs.c}">
         <p class="kicker">Today's article · ${esc(f.s)}</p><h2>${esc(f.t)}</h2><p>${esc(f.sum)}</p>
         <span class="chip s">${fs.i} ${esc(yearTxt(f.y) || f.s)}</span></a>` : ""}
-    </section>
+    </section></div>
+    <a class="hall-banner" href="#/presidents"><span class="medal big" style="--era:#c9a227"><b>47</b><i>★</i></span>
+      <span><p class="kicker">New · The Hall of Presidents</p><b>Every president. Every inaugural address, word for word.</b><small>Roll call · speeches that light up as they're spoken · Who said it? · Order up!</small></span><span class="pill gold">Enter →</span></a>
     <section class="section"><div class="row-head"><h2>Subjects</h2><a href="#/explore">All articles →</a></div>
       <div class="subjects">${Object.entries(C.SUBJECTS).filter(([n]) => counts[n]).map(([n, v]) =>
         `<a class="subject" href="#/subject/${encodeURIComponent(n)}" style="--accent:${v.c}"><i>${v.i}</i><span><b>${esc(n)}</b><small>${counts[n]} articles</small></span></a>`).join("")}</div></section>
@@ -160,6 +167,7 @@ async function showArticle(slug, hi) {
   const arts = await C.articles();
   const rel = (a.related || []).map(r => arts.find(x => x.t.toLowerCase() === r.toLowerCase())).filter(Boolean);
   const srcHits = (await C.search(a.title + " " + (a.related || []).join(" "), 5)).sources.slice(0, 5);
+  document.body.style.setProperty("--page-accent", s.c);
   view.innerHTML = `
     <div class="crumbs"><a href="#/explore">Articles</a> › <a href="#/subject/${encodeURIComponent(a.subject)}">${esc(a.subject)}</a></div>
     <div class="article" style="--accent:${s.c}">
@@ -196,7 +204,7 @@ async function showArticle(slug, hi) {
 
 // ------------------------------------------------------------------ read aloud with sentence highlight
 let speaking = null;
-function stopSpeaking() { if (speaking) { speaking.stop = true; speechSynthesis.cancel(); document.querySelectorAll(".s.speak").forEach(x => x.classList.remove("speak")); speaking = null; } }
+function stopSpeaking() { P.hush(); if (speaking) { speaking.stop = true; speechSynthesis.cancel(); document.querySelectorAll(".s.speak").forEach(x => x.classList.remove("speak")); speaking = null; } }
 function speak(root, btn) {
   if (!("speechSynthesis" in window)) { btn.textContent = "No voice on this device"; return; }
   if (speaking) { stopSpeaking(); btn.textContent = "▶ Read to me"; return; }
@@ -374,7 +382,7 @@ async function searchPage(qv) {
   const r = await C.search(qv, 40);
   view.innerHTML = `<p class="kicker">Search</p><h1>“${esc(qv)}”</h1>
     ${r.articles.length ? `<section class="section"><h2>Articles</h2><div class="grid">${r.articles.map(articleCard).join("")}</div></section>` : ""}
-    ${r.sentences.length ? `<section class="section"><h2>Sentences</h2><ul class="variants">${r.sentences.slice(0, 25).map(s => `<li><b><a href="#/m/${s.a}">${s.a}</a></b><span>${esc(s.t)} <a class="fine" href="#/a/${s.slug}?s=${s.a}">— ${esc(s.title)}</a></span></li>`).join("")}</ul></section>` : ""}
+    ${r.sentences.length ? `<section class="section"><h2>Sentences</h2><ul class="variants">${r.sentences.slice(0, 25).map(s => `<li><b><a href="#/m/${s.a}">${s.a}</a></b><span>${esc(s.t)} <a class="fine" href="${sentHref(s)}">— ${esc(s.title)}</a></span></li>`).join("")}</ul></section>` : ""}
     ${r.sources.length ? `<section class="section"><h2>Primary sources</h2><div class="grid">${r.sources.map(e => `<a class="card" href="${srcHref(e)}"><span class="meta">${esc(e.section.title)}</span><h3>${esc(e.t)}</h3></a>`).join("")}</div></section>` : ""}
     ${!r.articles.length && !r.sentences.length && !r.sources.length ? `<div class="empty section">Nothing yet. Ask the tutor, or have the Library Desk on base1 find it on loc.gov.</div>` : ""}`;
 }
@@ -394,13 +402,16 @@ function setChips() {
 function msg(cls, html) { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d; }
 async function ask(text) {
   if (!text.trim()) return;
+  if (/president|inaugur|speech|address|said|washington|lincoln|roosevelt|kennedy|jefferson|reagan|obama|adams|madison|monroe|jackson|grant|wilson|truman|eisenhower|nixon|carter|clinton|bush|trump|biden|harrison|cleveland|mckinley|taft|harding|coolidge|hoover|johnson|polk|taylor|pierce|buchanan|hayes|garfield|arthur|tyler|fillmore|ford|van buren/i.test(text) && !C.speechesLoaded()) {
+    const w = msg("ai", "Opening the Hall of Presidents speeches…"); await C.speechIndex().catch(() => {}); w.remove();
+  }
   msg("me", esc(text));
   const wait = msg("ai", "…");
   try {
     const r = await T.answer(text, { slug: state.slug, level: state.level });
     if (r.kind === "quiz") { wait.innerHTML = esc(r.text); location.hash = "#/quiz?a=" + r.slug; return; }
     wait.innerHTML = esc(r.text).replace(/\[(\d+\.\d+)\]/g, '<a href="#/m/$1">[$1]</a>').replace(/\n/g, "<br>") +
-      (r.cites || []).map(c => `<blockquote>${esc(c.t)}<a href="#/a/${c.slug}?s=${c.a}" title="${esc(c.title)}">${c.a}</a></blockquote>`).join("") +
+      (r.cites || []).map(c => `<blockquote>${esc(c.t)}${c.who ? ` <span class="fine">— ${esc(c.who)}</span>` : ""}<a href="${sentHref(c)}" title="${esc(c.title)}">${c.a}</a></blockquote>`).join("") +
       ((r.actions || []).length ? `<div class="acts">${r.actions.map(a => `<a href="${a.href}">${esc(a.label)}</a>`).join("")}</div>` : "") +
       (r.model ? `<small>written by ${esc(r.model)} on base1 from the passages above</small>` : r.note ? `<small>${esc(r.note)}</small>` : "");
   } catch (e) { wait.textContent = "Couldn't reach the library just now."; }
