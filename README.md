@@ -39,9 +39,9 @@ https://pxd2.github.io/cog/
 ```
 books/              dual-number packs (JSON)
   loc-m-NNNN.json   absorbed meaning packs  [meaning-id, keys, [first-variant], [variants]]
-  loc-d-NNNN.json   absorbed documents as address lines: "1000.0 1007.2 | 1012.0"  (| = paragraph)
   catalog.json      every book + meaning-id ranges (the site reads this)
-loc/state.json      next free meaning-id, open files, where each loc.gov source left off
+sections/<name>/    library sections: docs-NNNN.json = documents as address lines "1000.0 1007.2 | 1012.0" (| = paragraph)
+loc/state.json      next free meaning-id, open files, sections (title + where stored), where each source left off
 loc/registry/       lookup segments: meaning hash -> id, sentence hash -> address, item -> doc pack
 plates/             PMOC-ready inspectable twins
 tools/              cog_absorber.py (engine) + cog_absorber_gui.py (window)
@@ -55,6 +55,10 @@ The Library of Congress is a taxpayer trust: held in trust for the people who pa
 `tools/cog_absorber.py` pulls loc.gov items into memory, splits them into sentences, gives each new meaning the next free
 number (from 1000) and each new exact wording the next variant index, and pushes only the delta here with the Git Data API.
 No clone and no local library. Files are rewritten only while they are the open one (< 1 MB); closed files never change.
+Documents are held in **library sections** (Law, The Reformers, ...). Each section has its own storage spot: a folder
+here (`sections/<name>/`) or its own repository (`owner/repo`). Meaning-ids stay global: one registry in core, so the
+same sentence has the same address in every section. Section repos are written first, core second, so core never
+points at a document that is not there. The site reads core sections directly and public section repos via raw GitHub.
 A rights gate holds back anything after 1930 without an open-rights statement, because this repo is public.
 
 ```

@@ -215,15 +215,18 @@ class MemStore:
 class Library:
     """The COG library as it stands on GitHub, plus what this run adds. Only open files are ever rewritten."""
 
-    def __init__(self, store, log=print):
+    def __init__(self, store, log=print, store_for=None):
         self.store, self.log = store, log
+        self.store_for = store_for or (lambda repo: GitHubStore(repo, getattr(store, "branch", BRANCH), getattr(store, "token", None)))
+        self.ext: dict[str, object] = {}           # section repos opened this run
         store.refresh()
         st = store.get("loc/state.json")
         self.state = json.loads(st) if st else {
             "about": "COG absorbed library. " + TRUST, "next_meaning": FIRST_ABSORBED,
-            "open": {"m": 1, "d": 1, "r": 1}, "sources": {}, "totals": {"meanings": 0, "variants": 0, "docs": 0, "sentences": 0},
+            "open": {"m": 1, "r": 1}, "sections": {}, "sources": {}, "totals": {"meanings": 0, "variants": 0, "docs": 0, "sentences": 0},
             "updated": now()}
         self.state.setdefault("totals", {}).setdefault("sentences", 0)
+        self.state.setdefault("sections", {})
         # registry: everything ever assigned (loaded from all segments)
         self.mean: dict[str, int] = {}             # meaning hash -> meaning-id
         self.nvar: dict[int, int] = {}             # meaning-id -> variants so far
@@ -240,7 +243,7 @@ class Library:
         # the open (still growing) files
         o = self.state["open"]
         self.mpack = self._load(self.mfile(o["m"])) or self._new_mpack(o["m"])
-        self.dpack = self._load(self.dfile(o["d"])) or self._new_dpack(o["d"])
+        self.dpacks: dict[str, dict] = {}            # section -> its open document pack (loaded when first used)
         self.rseg = self._load(self.rfile(o["r"])) or {"m": {}, "v": {}, "i": {}}
         self._rows = {r[0]: r for r in self.mpack["s"]}
         self._msize, self._rsize = len(dumps(self.mpack)), len(dumps(self.rseg))
@@ -254,7 +257,7 @@ class Library:
     @staticmethod
     def mfile(n): return f"books/loc-m-{n:04d}.json"
     @staticmethod
-    def dfile(n): return f"books/loc-d-{n:04d}.json"
+    def dfile(sec, n): return f"sections/{sec}/docs-{n:04d}.json"
     @staticmethod
     def rfile(n): return f"loc/registry/r-{n:04d}.json"
 
@@ -265,9 +268,38 @@ class Library:
     def _new_mpack(self, n):
         return {"name": f"loc-m-{n:04d}", "ver": 1, "w": 2, "crc": 0, "src": "loc.gov", "trust": TRUST, "s": []}
 
-    def _new_dpack(self, n):
-        return {"name": f"loc-d-{n:04d}", "ver": 1, "kind": "docs", "src": "loc.gov", "trust": TRUST,
-                "note": "seq = meaning.variant addresses; | = paragraph break", "docs": []}
+    def _new_dpack(self, sec, n):
+        return {"name": f"{sec}/docs-{n:04d}", "ver": 1, "kind": "docs", "section": sec, "src": "loc.gov", "trust": TRUST,
+                "note": "seq = meaning.variant addresses (meanings live in the core books/); | = paragraph break", "docs": []}
+
+    # sections: groups of documents, each with its own storage spot. Meaning-ids stay global (one registry in core).
+    def section(self, sec: str, title: str = "", store: str = "core") -> dict:
+        sec = re.sub(r"[^a-z0-9-]+", "-", sec.lower()).strip("-") or "general"
+        st = self.state["sections"].get(sec)
+        if st is None:
+            st = self.state["sections"][sec] = {"title": title or sec.replace("-", " ").title(), "store": store or "core",
+                                                "open": 1, "docs": 0, "sentences": 0, "created": now()}
+            self.log(f"New section: {st['title']} (stored in {'core' if st['store'] == 'core' else st['store']})")
+        elif store and store != st["store"]:
+            self.log(f"  section {sec} already lives in {st['store']}; keeping it there (moving a section is a separate job)")
+        return st
+
+    def _sec_store(self, sec: str):
+        repo = self.state["sections"][sec]["store"]
+        if repo == "core":
+            return self.store
+        if repo not in self.ext:
+            s = self.store_for(repo)
+            s.refresh()
+            self.ext[repo] = s
+        return self.ext[repo]
+
+    def _dpack(self, sec: str) -> dict:
+        if sec not in self.dpacks:
+            n = self.state["sections"][sec]["open"]
+            b = self._sec_store(sec).get(self.dfile(sec, n))
+            self.dpacks[sec] = json.loads(b) if b else self._new_dpack(sec, n)
+        return self.dpacks[sec]
 
     def _absorb_segment(self, seg: dict) -> None:
         for h, m in seg.get("m", {}).items():
@@ -326,7 +358,11 @@ class Library:
         self.items[h] = self.rseg["i"][h] = where
         self.dirty.add("r")
 
-    def add_doc(self, item_id: str, meta: dict, text: str) -> int:
+    def add_doc(self, item_id: str, meta: dict, text: str, sec: str = "general") -> int:
+        if sec not in self.state["sections"]:
+            sec_key = sec
+            self.section(sec_key)
+        sst = self.state["sections"][sec]
         seq, n = [], 0
         for seg in segments(text):
             sent = norm_sentence(seg)
@@ -347,14 +383,18 @@ class Library:
             entry = dict(meta, id=item_id, n=n, chars=len(text), seq=p, at=now())
             if len(parts) > 1:
                 entry["part"] = f"{i + 1}/{len(parts)}"
-            if len(dumps(self.dpack)) + len(p) > PACK_LIMIT and self.dpack["docs"]:
-                self._roll("d")
-            self.dpack["docs"].append(entry)
+            dp = self._dpack(sec)
+            if len(dumps(dp)) + len(p) > PACK_LIMIT and dp["docs"]:
+                self._roll("d:" + sec)
+                dp = self._dpack(sec)
+            dp["docs"].append(entry)
             self.pending += len(p) + 200
-        self.dirty.add("d")
-        self.mark(item_id, self.dfile(self.state["open"]["d"]))
+            self.dirty.add("d:" + sec)
+        self.mark(item_id, f"{sec}:{self.dfile(sec, sst['open'])}")
         self.state["totals"]["docs"] += 1
         self.state["totals"]["sentences"] += n
+        sst["docs"] += 1
+        sst["sentences"] += n
         self._maybe_roll()
         return n
 
@@ -362,26 +402,32 @@ class Library:
     def _roll(self, kind: str) -> None:
         """Close the open file (it never changes again) and open the next one. Everything waiting is pushed in the
         same commit, so the registry on GitHub always covers every number already used."""
-        closing = self._files_for({kind})
-        name = list(closing)[0]
+        core, ext = self._files_for({kind})
+        name = (list(core) or [p for f in ext.values() for p in f])[0]
         if kind == "m":
             self.ranges[name] = self._range(self.mpack)
-        files = self._files_for(self.dirty | {kind})
-        self.state["open"][kind] += 1
-        n = self.state["open"][kind]
+        core, ext = self._files_for(self.dirty | {kind})
+        if kind.startswith("d:"):
+            sec = kind[2:]
+            self.state["sections"][sec]["open"] += 1
+            n = self.state["sections"][sec]["open"]
+            self.dpacks[sec] = self._new_dpack(sec, n)
+        else:
+            self.state["open"][kind] += 1
+            n = self.state["open"][kind]
         if kind == "m":
             self.mpack, self._rows = self._new_mpack(n), {}
             self._msize = len(dumps(self.mpack))
-        elif kind == "d":
-            self.dpack = self._new_dpack(n)
+        elif kind.startswith("d:"):
+            pass
         else:
             self.rseg = {"m": {}, "v": {}, "i": {}}
             self._rsize = 20
         self.dirty.discard(kind)
-        self._commit(files, f"COG: close {name} (< 1 MB); open {kind}-{n:04d}")
+        self._commit(core, ext, f"COG: close {name} (< 1 MB); next {n:04d}")
         self.dirty.clear()
         self.pending = 0
-        self.log(f"  closed {name}; next is {kind}-{n:04d}")
+        self.log(f"  closed {name}; next file {n:04d}")
 
     def _maybe_roll(self) -> None:
         self._msize, self._rsize = len(dumps(self.mpack)), len(dumps(self.rseg))
@@ -390,15 +436,20 @@ class Library:
         if self._rsize > PACK_LIMIT:
             self._roll("r")
 
-    def _files_for(self, kinds: set[str]) -> dict[str, bytes]:
-        o, out = self.state["open"], {}
+    def _files_for(self, kinds: set[str]) -> tuple[dict[str, bytes], dict[str, dict[str, bytes]]]:
+        """(files for the core repo, {section repo: files})"""
+        o, core, ext = self.state["open"], {}, {}
         if "m" in kinds:
-            out[self.mfile(o["m"])] = dumps(self.mpack)
-        if "d" in kinds:
-            out[self.dfile(o["d"])] = dumps(self.dpack)
+            core[self.mfile(o["m"])] = dumps(self.mpack)
         if "r" in kinds:
-            out[self.rfile(o["r"])] = dumps(self.rseg)
-        return out
+            core[self.rfile(o["r"])] = dumps(self.rseg)
+        for k in kinds:
+            if k.startswith("d:") and k[2:] in self.dpacks:
+                sec = k[2:]
+                st = self.state["sections"][sec]
+                f = {self.dfile(sec, st["open"]): dumps(self.dpacks[sec])}
+                (core.update(f) if st["store"] == "core" else ext.setdefault(st["store"], {}).update(f))
+        return core, ext
 
     def catalog(self, tree_paths) -> dict:
         own = {"cog-english-v0": ("English", "Inquiry into situation, status, activity."),
@@ -411,8 +462,6 @@ class Library:
             name = p[6:-5]
             if name.startswith("loc-m-"):
                 books.append({"file": p, "kind": "meanings", "room": "loc"})
-            elif name.startswith("loc-d-"):
-                books.append({"file": p, "kind": "docs", "room": "loc"})
             else:
                 t, b = own.get(name, (name, ""))
                 books.append({"file": p, "kind": "meanings", "room": name, "title": t, "blurb": b})
@@ -420,8 +469,13 @@ class Library:
         for b in books:
             if b["room"] == "loc" and b["kind"] == "meanings":
                 b.update(self._range(self.mpack) if b["file"] == open_m else self.ranges.get(b["file"], {}))
+        sections = []
+        for sec, st in self.state["sections"].items():
+            base = "" if st["store"] == "core" else f"https://raw.githubusercontent.com/{st['store']}/{getattr(self.store, 'branch', BRANCH)}/"
+            sections.append({"id": sec, "title": st["title"], "store": st["store"], "base": base, "docs": st["docs"],
+                             "sentences": st["sentences"], "files": [self.dfile(sec, i) for i in range(1, st["open"] + 1)]})
         return {"name": "COG catalog", "updated": now(), "trust": TRUST, "next_meaning": self.state["next_meaning"],
-                "totals": self.state["totals"], "books": books}
+                "totals": self.state["totals"], "books": books, "sections": sections}
 
     @staticmethod
     def _range(pack) -> dict:
@@ -429,7 +483,10 @@ class Library:
         return {"from": min(new) if new else None, "to": max(new) if new else None,
                 "cont": sorted({r[0] for r in pack["s"] if r[2] != [0]})}
 
-    def _commit(self, files: dict[str, bytes], message: str) -> str:
+    def _commit(self, files: dict[str, bytes], ext: dict[str, dict[str, bytes]], message: str) -> str:
+        """Section repos first, then core (registry + state) — so core never points at a document that is not there."""
+        for repo, f in ext.items():
+            self.ext[repo].commit(f, message)
         self.state["updated"] = now()
         files = dict(files)
         files["loc/state.json"] = dumps(self.state)
@@ -440,7 +497,8 @@ class Library:
     def flush(self, message: str) -> str | None:
         if not self.dirty:
             return None
-        sha = self._commit(self._files_for(self.dirty), message)
+        core, ext = self._files_for(self.dirty)
+        sha = self._commit(core, ext, message)
         self.dirty.clear()
         self.pending = 0
         return sha
@@ -469,19 +527,24 @@ def rights_ok(meta: dict, item_json: dict | None, cutoff: int = 1930) -> tuple[b
 # ------------------------------------------------------------------------------------------- the run
 class Absorber:
     def __init__(self, store, fetcher=None, log=print, progress=None, stop: threading.Event | None = None,
-                 rights_gate: bool = True, per_page: int = 25):
-        self.store, self.log = store, log
+                 rights_gate: bool = True, per_page: int = 25, store_for=None):
+        self.store, self.log, self.store_for = store, log, store_for
         self.fetcher = fetcher or L.Fetcher(slow=90)
         self.progress = progress or (lambda done, total, label: None)
         self.stop = stop or threading.Event()
         self.rights_gate, self.per_page = rights_gate, per_page
 
-    def run(self, sources: list[str], max_items: int, max_pages: int = 20) -> dict:
-        lib = Library(self.store, self.log)
+    def run(self, sources: list, max_items: int, max_pages: int = 20) -> dict:
+        """sources: loc.gov source strings, or dicts {"src", "section", "title", "store"} to file them in a section."""
+        lib = Library(self.store, self.log, self.store_for)
         start = dict(lib.state["totals"])
         got, held, empty = 0, 0, 0
         last_sha = None
-        for src in sources:
+        for spec in sources:
+            spec = spec if isinstance(spec, dict) else {"src": spec}
+            src = spec["src"]
+            sec = lib.section(spec.get("section") or "general", spec.get("title", ""), spec.get("store") or "core")
+            sec_id = [k for k, v in lib.state["sections"].items() if v is sec][0]
             if self.stop.is_set() or got >= max_items:
                 break
             prog = lib.state["sources"].setdefault(src, {"next": L.start_url(src, self.per_page), "pages": 0, "done": False})
@@ -505,7 +568,7 @@ class Absorber:
                     if not item_id or lib.seen(item_id):
                         continue
                     meta = {"title": L.as_text(rec.get("title"))[:300], "date": L.as_text(rec.get("date") or rec.get("dates"))[:40],
-                            "url": L.as_text(rec.get("url") or item_id), "source": src}
+                            "url": L.as_text(rec.get("url") or item_id), "source": src, "section": sec_id}
                     api = L.item_api_url(item_id)
                     ij = self.fetcher.get_json(api) if api else None
                     ij = ij if isinstance(ij, dict) else None
@@ -529,7 +592,7 @@ class Absorber:
                         self.log(f"  no text online: {meta['title'][:70]}")
                         continue
                     before = lib.state["totals"]["meanings"]
-                    n = lib.add_doc(item_id, meta, text)
+                    n = lib.add_doc(item_id, meta, text, sec_id)
                     got += 1
                     self.log(f"  [{got}/{max_items}] {n:,} sentences · +{lib.state['totals']['meanings'] - before:,} new meanings · {meta['title'][:70]}")
                     self.progress(got, max_items, meta["title"])
@@ -616,7 +679,7 @@ def selftest() -> None:
     assert r["docs"] == 2 and r["held_back"] == 1, r
     st = json.loads(store.files["loc/state.json"])
     assert st["sources"]["q:test"]["done"] is True
-    d = json.loads(store.files["books/loc-d-0001.json"])["docs"]
+    d = json.loads(store.files["sections/general/docs-0001.json"])["docs"]
     seqA = d[0]["seq"]
     first = seqA.split()[:3]
     assert first == ["1000.0", "1000.1", "1000.2"], first           # same meaning, three exact wordings
@@ -640,7 +703,7 @@ def selftest() -> None:
     Absorber(store, FakeFetcher(), log=logs.append).run(["q:more"], max_items=5)
     lib2 = Library(store, log=logs.append)
     assert lib2.nvar[1000] == nv + 1, (nv, lib2.nvar[1000])
-    e_seq = [x for x in json.loads(store.files["books/loc-d-0001.json"])["docs"] if x["title"] == "E"][0]["seq"]
+    e_seq = [x for x in json.loads(store.files["sections/general/docs-0001.json"])["docs"] if x["title"] == "E"][0]["seq"]
     assert decode(store, e_seq).endswith("To lay and collect taxes, Congress shall have power.")
     # rolling packs stays under 1 MB
     global PACK_LIMIT
@@ -653,8 +716,28 @@ def selftest() -> None:
         PACK_LIMIT = old
     packs = [p for p in store.files if p.startswith("books/loc-m-")]
     assert len(packs) > 3, packs
-    f_seq = " ".join(x["seq"] for x in json.loads(store.files[max(p for p in store.files if p.startswith("books/loc-d-"))])["docs"] if x["title"] == "F")
+    f_seq = " ".join(x["seq"] for x in json.loads(store.files[max(p for p in store.files if p.startswith("sections/general/docs-"))])["docs"] if x["title"] == "F")
     assert decode(store, f_seq).startswith("Sentence number 0 about subject 0. Sentence number 1"), decode(store, f_seq)[:60]
+    # sections: groups with their own storage; meaning-ids stay global
+    side = {}
+    factory = lambda repo: side.setdefault(repo, MemStore())
+    pages["https://www.loc.gov/collections/law-test/?fo=json&c=25&sp=1"] = {"pagination": {}, "results": [{"id": "http://www.loc.gov/item/g/", "title": "G", "date": "1791"}]}
+    pages["https://www.loc.gov/search/?q=ref&fo=json&c=25&sp=1"] = {"pagination": {}, "results": [{"id": "http://www.loc.gov/item/h/", "title": "H", "date": "1644"}]}
+    texts["g"] = "It is so ordered. Congress shall make no law respecting an establishment of religion. " * 5
+    texts["h"] = "It is so ordered. Lex rex: the law is king. A brand new reformer sentence here. " * 5
+    Absorber(store, FakeFetcher(), log=logs.append, store_for=factory).run(
+        [{"src": "law-test", "section": "Law", "title": "Law"},
+         {"src": "q:ref", "section": "reformers", "title": "The Reformers", "store": "PxD2/cog-reformers"}], max_items=5)
+    assert "sections/law/docs-0001.json" in store.files                      # core-hosted section
+    assert "sections/reformers/docs-0001.json" in side["PxD2/cog-reformers"].files   # its own repo
+    assert not any(p.startswith("sections/reformers/") for p in store.files)
+    h = json.loads(side["PxD2/cog-reformers"].files["sections/reformers/docs-0001.json"])["docs"][0]["seq"]
+    g = json.loads(store.files["sections/law/docs-0001.json"])["docs"][0]["seq"]
+    assert h.split()[0] == g.split()[0], (h[:20], g[:20])                    # "It is so ordered." = same address everywhere
+    assert decode(store, h).startswith("It is so ordered. Lex rex")
+    cat = json.loads(store.files["books/catalog.json"])
+    secs = {x["id"]: x for x in cat["sections"]}
+    assert secs["reformers"]["base"].startswith("https://raw.githubusercontent.com/PxD2/cog-reformers/") and secs["law"]["base"] == ""
     print(f"selftest ok · {len(store.commits)} commits · {len(packs)} meaning packs · next meaning {json.loads(store.files['loc/state.json'])['next_meaning']}")
 
 

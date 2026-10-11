@@ -191,17 +191,16 @@ function expand(room, id) {
   d.innerHTML = `<h3>${keys[0].replace(/_/g," ")}</h3><div class="addr">(${id}, N)</div><ul class="variants">${list}</ul>`;
   d.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
-// ---- Library of Congress room: absorbed documents, read back from their addresses
-let docPacks = [], docShown = 0, docList = [];
+// ---- Library of Congress room: sections (groups, each stored in its own place) -> documents, rebuilt from addresses
+let docPacks = [], docShown = 0, docList = [], docBase = "";
 async function showLoc() {
   const cat = await getCatalog();
   const t = cat.totals || {};
-  docPacks = cat.books.filter(b => b.room === "loc" && b.kind === "docs").map(b => b.file).reverse();
-  docShown = 0; docList = [];
+  const secs = cat.sections || [];
   document.getElementById("fast-links").innerHTML = "";
   document.getElementById("view").innerHTML = `
     <div class="hero"><h2>Library of Congress</h2>
-      <p>Texts absorbed from loc.gov. Each document is stored only as a line of (meaning, variant) addresses and rebuilt here from the meaning packs. Absorbed meanings start at 1000.</p>
+      <p>Texts absorbed from loc.gov, held in sections. Each document is stored only as a line of (meaning, variant) addresses and rebuilt here from the meaning packs. Meaning-ids are global; absorbed ones start at 1000.</p>
       <div class="trust">${esc(cat.trust || "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.")}</div></div>
     <div class="stats">
       <div><b>${(t.docs||0).toLocaleString()}</b><span>documents</span></div>
@@ -210,24 +209,36 @@ async function showLoc() {
       <div><b>${(t.sentences||0).toLocaleString()}</b><span>sentences read</span></div>
       <div><b>${cat.next_meaning || 1000}</b><span>next free meaning-id</span></div>
     </div>
-    <div class="grid" id="docs"></div>
-    <div style="margin-top:1rem"><button class="more" id="more" style="display:none">More documents</button></div>
-    <div id="reader"></div>`;
+    <div class="grid" id="secs">${secs.length ? secs.map((x, i) => `<div class="card" data-sec="${i}"><div class="id">Section</div><h3>${esc(x.title)}</h3>
+      <div class="keys">${(x.docs||0).toLocaleString()} documents · ${(x.sentences||0).toLocaleString()} sentences</div></div>`).join("")
+      : `<p style="color:var(--muted)">Nothing absorbed yet — press ABSORB NOW in the COG Absorber on base1.</p>`}</div>
+    <div id="secview"></div>`;
+  document.querySelectorAll(".card[data-sec]").forEach(c => c.onclick = () => openSection(secs[+c.dataset.sec]));
+}
+function openSection(sec) {
+  docBase = sec.base || "";
+  docPacks = [...(sec.files || [])].reverse();
+  docShown = 0; docList = [];
+  const v = document.getElementById("secview");
+  v.innerHTML = `<div class="hero" style="margin-top:1.4rem"><h2>${esc(sec.title)}</h2></div><div class="grid" id="docs"></div>
+    <div style="margin-top:1rem"><button class="more" id="more" style="display:none">More documents</button></div><div id="reader"></div>`;
   document.getElementById("more").onclick = moreDocs;
-  if (!docPacks.length) { document.getElementById("docs").innerHTML = `<p style="color:var(--muted)">Nothing absorbed yet — press ABSORB NOW in the COG Absorber on base1.</p>`; return; }
+  v.scrollIntoView({behavior: "smooth"});
   moreDocs();
 }
 async function moreDocs() {
   if (docShown >= docPacks.length) return;
-  const d = await getFile(docPacks[docShown++]);
+  let d;
+  try { d = await getFile(docBase + docPacks[docShown++]); } catch (e) { d = { docs: [] }; }
   const grid = document.getElementById("docs");
   [...d.docs].reverse().forEach(doc => {
     const i = docList.push(doc) - 1;
     grid.insertAdjacentHTML("beforeend", `<div class="card" data-doc="${i}"><div class="id">${esc(doc.date || "")}${doc.part ? " · part " + doc.part : ""}</div>
-      <h3>${esc(doc.title || doc.id)}</h3><div class="keys">${(doc.n||0).toLocaleString()} sentences · ${esc((doc.source||"").replace(/^q:/,"search: ").replace(" |books",""))}</div></div>`);
+      <h3>${esc(doc.title || doc.id)}</h3><div class="keys">${(doc.n||0).toLocaleString()} sentences</div></div>`);
   });
   grid.querySelectorAll(".card[data-doc]").forEach(c => c.onclick = () => readDoc(docList[+c.dataset.doc]));
   document.getElementById("more").style.display = docShown < docPacks.length ? "" : "none";
+  if (!docList.length && docShown >= docPacks.length) grid.innerHTML = `<p style="color:var(--muted)">No documents in this section yet.</p>`;
 }
 async function readDoc(doc) {
   const r = document.getElementById("reader");

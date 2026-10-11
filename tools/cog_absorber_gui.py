@@ -17,7 +17,7 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                             QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
+                             QInputDialog, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
                              QProgressBar, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget)
 
 HERE = Path(__file__).resolve().parent
@@ -33,16 +33,21 @@ STUDIO = Path.home() / "PxD2" / "pxd2-studio"
 STARTUP_VBS = Path(os.environ.get("APPDATA", str(Path.home()))) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "Digital Alexandria.vbs"
 
 PRESETS = [
-    ("collection", "century-of-lawmaking", "Law · A Century of Lawmaking for a New Nation"),
-    ("collection", "united-states-reports", "Law · United States Reports (Supreme Court)"),
-    ("query", "Samuel Rutherford", "Reformers · Samuel Rutherford (Lex Rex)"),
-    ("query", "John Knox", "Reformers · John Knox"),
-    ("query", "John Witherspoon", "Reformers · John Witherspoon"),
-    ("query", "John Calvin", "Reformers · John Calvin"),
-    ("query", "Martin Luther", "Reformers · Martin Luther"),
-    ("query", "Theodore Beza", "Reformers · Theodore Beza"),
-    ("query", "George Buchanan", "Reformers · George Buchanan (De Jure Regni)"),
+    # (kind, value, label, section)
+    ("collection", "century-of-lawmaking", "A Century of Lawmaking for a New Nation", "law"),
+    ("collection", "united-states-reports", "United States Reports (Supreme Court)", "law"),
+    ("query", "Samuel Rutherford", "Samuel Rutherford (Lex Rex)", "reformers"),
+    ("query", "John Knox", "John Knox", "reformers"),
+    ("query", "John Witherspoon", "John Witherspoon", "reformers"),
+    ("query", "John Calvin", "John Calvin", "reformers"),
+    ("query", "Martin Luther", "Martin Luther", "reformers"),
+    ("query", "Theodore Beza", "Theodore Beza", "reformers"),
+    ("query", "George Buchanan", "George Buchanan (De Jure Regni)", "reformers"),
 ]
+# Library sections: how documents are grouped and where each group is stored ("core" = a folder in PxD2/cog,
+# or "owner/repo" = its own repository). Meaning-ids are global either way.
+SECTIONS = {"law": {"title": "Law", "store": "core"}, "reformers": {"title": "The Reformers", "store": "core"},
+            "general": {"title": "General", "store": "core"}}
 # The timed runs this window replaces. (kind, name, label)
 TIMED = [
     ("task", "PXD2 Studio Autopilot", "PXD2 Studio Autopilot — every night 11 PM"),
@@ -78,13 +83,21 @@ QCheckBox::indicator { width: 15px; height: 15px; }
 
 # ------------------------------------------------------------------------------------------- settings
 def load_settings() -> dict:
-    s = {"sources": [dict(kind=k, value=v, label=l, on=(i < 2)) for i, (k, v, l) in enumerate(PRESETS)],
+    s = {"sources": [dict(kind=k, value=v, label=l, section=c, on=(i < 2)) for i, (k, v, l, c) in enumerate(PRESETS)],
+         "sections": json.loads(json.dumps(SECTIONS)),
          "items": 25, "pages": 20, "books": True, "rights": True, "dry": False, "repo": A.REPO, "branch": A.BRANCH,
          "timed_cancelled": False}
     try:
         s.update(json.loads(SETTINGS.read_text(encoding="utf-8")))
     except Exception:
         pass
+    for src in s["sources"]:                       # older settings: put each source in a section
+        if "section" not in src:
+            lab = src.get("label", "")
+            src["section"] = "law" if lab.startswith("Law") else "reformers" if lab.startswith("Reformers") else "general"
+            src["label"] = lab.split(" · ", 1)[-1]
+    for k, v in SECTIONS.items():
+        s["sections"].setdefault(k, v)
     return s
 
 
@@ -154,19 +167,28 @@ class Worker(QObject):
             if dry:
                 gh = A.GitHubStore(repo, branch)
                 gh.refresh()
-                store = A.MemStore({p: gh.get(p) for p in gh.tree if p.startswith(("loc/", "books/catalog", "books/loc-"))})
+                store = A.MemStore({p: gh.get(p) for p in gh.tree if p.startswith(("loc/", "books/catalog", "books/loc-", "sections/"))})
+
+                def store_for(r):                    # dry run: section repos are read, never written
+                    g = A.GitHubStore(r, branch)
+                    try:
+                        g.refresh()
+                        return A.MemStore({p: g.get(p) for p in g.tree if p.startswith("sections/")})
+                    except Exception:
+                        return A.MemStore()
                 self.log.emit("Dry run: numbering in memory, nothing will be pushed.")
             else:
+                store_for = None
                 store = A.GitHubStore(repo, branch)
                 if not store.token:
                     self.done.emit({"error": "No GitHub sign-in found. Run `gh auth login` once (or push once with Git), then press again."})
                     return
             ab = A.Absorber(store, log=self.log.emit, progress=lambda d, t, l: self.progress.emit(d, t, l),
-                            stop=self.stop, rights_gate=rights)
+                            stop=self.stop, rights_gate=rights, store_for=store_for)
             r = ab.run(sources, items, pages)
             if dry:
                 for p, b in sorted(store.files.items()):
-                    if p.startswith(("loc/", "books/")):
+                    if p.startswith(("loc/", "books/", "sections/")):
                         self.log.emit(f"  would push {p}  ({len(b):,} bytes)")
             self.done.emit(r)
         except Exception as e:      # noqa: BLE001
@@ -195,7 +217,7 @@ class Window(QMainWindow):
         super().__init__()
         self.s = load_settings()
         self.setWindowTitle("COG Absorber — the People's Trust")
-        self.resize(1180, 760)
+        self.resize(1180, 840)
         root = QWidget(objectName="root")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
@@ -222,6 +244,7 @@ class Window(QMainWindow):
         g = QGroupBox("WHAT TO ABSORB")
         gv = QVBoxLayout(g)
         self.list = QListWidget()
+        self.list.setMinimumHeight(170)
         for src in self.s["sources"]:
             self._add_item(src)
         gv.addWidget(self.list, 1)
@@ -232,14 +255,37 @@ class Window(QMainWindow):
         self.new.returnPressed.connect(self.add_source)
         b = QPushButton("Add")
         b.clicked.connect(self.add_source)
+        self.secpick = QComboBox()
+        self._fill_secpick()
         addrow.addWidget(self.kind)
         addrow.addWidget(self.new, 1)
-        addrow.addWidget(b)
         gv.addLayout(addrow)
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("into section"))
+        row2.addWidget(self.secpick, 1)
+        row2.addWidget(b)
         rm = QPushButton("Remove selected")
         rm.clicked.connect(self.remove_source)
-        gv.addWidget(rm, 0, Qt.AlignmentFlag.AlignLeft)
+        row2.addWidget(rm)
+        gv.addLayout(row2)
         lv.addWidget(g, 1)
+
+        sg = QGroupBox("LIBRARY SECTIONS — groups, each with its own storage")
+        sgv = QVBoxLayout(sg)
+        self.seclist = QListWidget()
+        self.seclist.setMaximumHeight(92)
+        sgv.addWidget(self.seclist)
+        sb2 = QHBoxLayout()
+        nb = QPushButton("New section…")
+        nb.clicked.connect(self.new_section)
+        mvb = QPushButton("Move selected source to section…")
+        mvb.clicked.connect(self.move_source)
+        sb2.addWidget(nb)
+        sb2.addWidget(mvb)
+        sb2.addStretch(1)
+        sgv.addLayout(sb2)
+        lv.addWidget(sg)
+        self._fill_seclist({})
 
         opt = QGroupBox("THIS RUN")
         og = QGridLayout(opt)
@@ -337,7 +383,8 @@ class Window(QMainWindow):
 
     # sources
     def _add_item(self, src: dict):
-        it = QListWidgetItem(src.get("label") or src["value"])
+        sec = self.s["sections"].get(src.get("section", "general"), {"title": src.get("section", "general")})
+        it = QListWidgetItem(f"[{sec['title']}]  {src.get('label') or src['value']}")
         it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         it.setCheckState(Qt.CheckState.Checked if src.get("on") else Qt.CheckState.Unchecked)
         it.setData(Qt.ItemDataRole.UserRole, src)
@@ -354,6 +401,7 @@ class Window(QMainWindow):
             src = dict(kind="collection", value=slug, label="Collection · " + slug, on=True)
         else:
             src = dict(kind="query", value=t, label="Search · " + t, on=True)
+        src["section"] = self.secpick.currentData() or "general"
         self._add_item(src)
         self.new.clear()
         self._save()
@@ -377,6 +425,63 @@ class Window(QMainWindow):
                       rights=self.rights.isChecked(), dry=self.dry.isChecked())
         save_settings(self.s)
 
+    # sections
+    def _fill_secpick(self):
+        self.secpick.clear()
+        for k, v in self.s["sections"].items():
+            self.secpick.addItem(v["title"], k)
+
+    def _fill_seclist(self, live: dict):
+        self.seclist.clear()
+        for k, v in self.s["sections"].items():
+            st = live.get(k, {})
+            where = "core (PxD2/cog)" if v["store"] == "core" else v["store"]
+            store = st.get("store", v["store"])
+            if store != v["store"]:
+                where = (("core (PxD2/cog)" if store == "core" else store) + "  — already holds documents, stays there")
+            self.seclist.addItem(f"{v['title']}   ·   {st.get('docs', 0):,} documents   ·   stored in {where}")
+
+    def new_section(self):
+        title, ok = QInputDialog.getText(self, "New section", "Section name (e.g. Founders' Papers, Newspapers — Arizona):")
+        if not ok or not title.strip():
+            return
+        store, ok = QInputDialog.getText(self, "Where is it stored?",
+                                         "Leave as core to keep it in PxD2/cog (sections/<name>/),\n"
+                                         "or give its own repository as owner/repo (create the repo on GitHub first).\n"
+                                         "Note: the public library site can only read public repositories.", text="core")
+        if not ok:
+            return
+        store = store.strip() or "core"
+        if store != "core" and not re.fullmatch(r"[\w.-]+/[\w.-]+", store):
+            QMessageBox.warning(self, "COG Absorber", "Storage must be core or owner/repo.")
+            return
+        sid = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-")
+        self.s["sections"][sid] = {"title": title.strip(), "store": store}
+        self._fill_secpick()
+        self.secpick.setCurrentIndex(self.secpick.findData(sid))
+        self._save()
+        self._fill_seclist(getattr(self, "_live_sections", {}))
+        self.say(f"Section added: {title.strip()} → {store}. Add sources into it, then press ABSORB NOW.")
+
+    def move_source(self):
+        items = self.list.selectedItems()
+        if not items:
+            return
+        names = [v["title"] for v in self.s["sections"].values()]
+        name, ok = QInputDialog.getItem(self, "Move to section", "Section:", names, 0, False)
+        if not ok:
+            return
+        sid = [k for k, v in self.s["sections"].items() if v["title"] == name][0]
+        for it in items:
+            d = dict(it.data(Qt.ItemDataRole.UserRole))
+            d["section"] = sid
+            row = self.list.row(it)
+            self.list.takeItem(row)
+            self._add_item(d)
+            self.list.insertItem(row, self.list.takeItem(self.list.count() - 1))
+        self._save()
+        self.say("Only new documents go to the new section; ones already absorbed stay where they are.")
+
     # log
     def say(self, line: str):
         self.out.appendPlainText(line)
@@ -399,7 +504,11 @@ class Window(QMainWindow):
             QMessageBox.information(self, "COG Absorber", "Tick at least one source.")
             return
         tag = A.L.BOOKS_TAG if self.books.isChecked() else ""
-        sources = [("q:" + x["value"] + tag) if x["kind"] == "query" else x["value"] for x in on]
+        sources = []
+        for x in on:
+            sec = self.s["sections"].get(x.get("section", "general"), {"title": "General", "store": "core"})
+            sources.append({"src": ("q:" + x["value"] + tag) if x["kind"] == "query" else x["value"],
+                            "section": x.get("section", "general"), "title": sec["title"], "store": sec["store"]})
         self.go.setEnabled(False)
         self.stopb.setEnabled(True)
         self.bar.setRange(0, self.items.value())
@@ -460,6 +569,8 @@ class Window(QMainWindow):
         self.stat["next"].setText(str(st.get("next_meaning", A.FIRST_ABSORBED)))
         for k in ("meanings", "variants", "docs", "sentences"):
             self.stat[k].setText(f"{t.get(k, 0):,}")
+        self._live_sections = st.get("sections") or {}
+        self._fill_seclist(self._live_sections)
         rows = []
         for src, p in (st.get("sources") or {}).items():
             name = src[2:].replace(A.L.BOOKS_TAG, "") if src.startswith("q:") else src
