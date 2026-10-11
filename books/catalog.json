@@ -1,13 +1,13 @@
 {
  "name": "COG catalog",
- "updated": "2026-10-11T02:54:01+00:00",
+ "updated": "2026-10-11T03:43:49+00:00",
  "trust": "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.",
- "next_meaning": 6823,
+ "next_meaning": 6936,
  "totals": {
-  "meanings": 5823,
-  "variants": 5829,
-  "docs": 96,
-  "sentences": 5870
+  "meanings": 5936,
+  "variants": 5942,
+  "docs": 176,
+  "sentences": 5950
  },
  "books": [
   {
@@ -44,7 +44,7 @@
    "kind": "meanings",
    "room": "core",
    "from": 4895,
-   "to": 6822,
+   "to": 6935,
    "cont": [
     4825
    ]
@@ -77,6 +77,20 @@
    ],
    "index": [
     "sections/presidents/index-0001.json"
+   ]
+  },
+  {
+   "id": "civics",
+   "title": "Laws, Amendments & the Court",
+   "store": "core",
+   "base": "",
+   "docs": 80,
+   "sentences": 80,
+   "files": [
+    "sections/civics/docs-0001.json"
+   ],
+   "index": [
+    "sections/civics/index-0001.json"
    ]
   }
  ]

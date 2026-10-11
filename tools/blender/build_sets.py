@@ -16,7 +16,7 @@ from mathutils import Vector, Matrix
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
-ap.add_argument("--scene", default="hall", choices=["hall", "presidents"])
+ap.add_argument("--scene", default="hall", choices=["hall", "presidents", "reading", "stair"])
 ap.add_argument("--out", default="out")
 ap.add_argument("--res", type=int, default=1024)
 ap.add_argument("--samples", type=int, default=40)
@@ -124,6 +124,20 @@ M = {
     "shelf": mat("shelf", "wood", (0.22, 0.11, 0.05), 0.6),
     "glow": mat("glow", "flat", (1.0, 0.82, 0.55), 0.5, 0, emit=25),
     "sky": mat("sky", "flat", (0.55, 0.68, 0.95), 0.5, 0, emit=3),
+    "glowblue": mat("glowblue", "flat", (0.55, 0.72, 1.0), 0.5, 0, emit=18),
+    "skylight": mat("skylight", "flat", (0.62, 0.74, 0.92), 0.5, 0, emit=2.6),   # big panes stay soft: no glare (eye comfort)
+    "walnut": mat("walnut", "wood", (0.26, 0.12, 0.05), 0.4),
+    "oak": mat("oak", "wood", (0.42, 0.24, 0.11), 0.5),
+    "brass": mat("brass", "flat", (0.78, 0.58, 0.25), 0.35, 1.0),
+    "fresco_blue": mat("fresco_blue", "plaster", (0.16, 0.28, 0.52), 0.8),
+    "fresco_gold": mat("fresco_gold", "plaster", (0.80, 0.62, 0.28), 0.6),
+    "fresco_rose": mat("fresco_rose", "plaster", (0.62, 0.34, 0.26), 0.7),
+    "rug": mat("rug", "marble", (0.45, 0.10, 0.08), 0.95),
+    "tapestry": mat("tapestry", "marble", (0.38, 0.33, 0.22), 0.95),
+    "books_a": mat("books_a", "wood", (0.40, 0.10, 0.07), 0.7),
+    "books_b": mat("books_b", "wood", (0.12, 0.22, 0.16), 0.7),
+    "books_c": mat("books_c", "wood", (0.42, 0.32, 0.14), 0.7),
+    "glass": mat("glass", "flat", (0.75, 0.85, 0.9), 0.05),
     "screen": mat("screen", "flat", (0.02, 0.02, 0.025), 0.4),
 }
 GROUPS = {}          # bake group -> list of objects
@@ -266,14 +280,15 @@ def build_hall():
     wall_r, wall_h = R + 2.2, 9.0
     seg = 120
     bm = bmesh.new()
-    niche_half = math.radians(9)
+    niche_half = math.radians(8)
+    NN = 12
     verts = []
     for i in range(seg + 1):
         a = i / seg * math.tau
         verts.append((bm.verts.new((math.cos(a) * wall_r, math.sin(a) * wall_r, 0)), bm.verts.new((math.cos(a) * wall_r, math.sin(a) * wall_r, wall_h))))
     for i in range(seg):
         a = (i + 0.5) / seg * math.tau
-        if any(abs(((a - k * math.tau / 10 + math.pi) % math.tau) - math.pi) < niche_half for k in range(10)):
+        if any(abs(((a - k * math.tau / 10 + math.pi) % math.tau) - math.pi) < niche_half for k in range(NN)):
             # opening: wall only above the niche arch
             b0, t0 = verts[i]; b1, t1 = verts[i + 1]
             m0 = bm.verts.new((b0.co.x, b0.co.y, 5.2)); m1 = bm.verts.new((b1.co.x, b1.co.y, 5.2))
@@ -287,8 +302,8 @@ def build_hall():
     for p in o.data.polygons:
         p.use_smooth = True
     # niches: back wall, shelves frame, arch
-    for k in range(10):
-        a = k * math.tau / 10
+    for k in range(NN):
+        a = k * math.tau / NN
         cx, cy = math.cos(a), math.sin(a)
         depth = 2.0
         back = box(f"niche_back_{k}", (0.3, 2 * wall_r * math.sin(niche_half), 5.2), ((wall_r + depth) * cx, (wall_r + depth) * cy, 2.6), "walls", "plaster", rot=a)
@@ -297,11 +312,11 @@ def build_hall():
             box(f"niche_side_{k}_{side}", (depth, 0.3, 5.2), ((wall_r + depth / 2) * math.cos(sa), (wall_r + depth / 2) * math.sin(sa), 2.6), "walls", "plaster", rot=a)
         box(f"niche_top_{k}", (depth, 2 * wall_r * math.sin(niche_half) + 0.3, 0.3), ((wall_r + depth / 2) * cx, (wall_r + depth / 2) * cy, 5.25), "walls", "coffer", rot=a)
         box(f"niche_floor_{k}", (depth + 0.4, 2 * wall_r * math.sin(niche_half), 0.08), ((wall_r + depth / 2) * cx, (wall_r + depth / 2) * cy, 0.04), "floor", "wood", rot=a)
-        if k == 0:     # doorway to the Hall of Presidents: velvet drapes + gold frame
+        if k in (0, 10, 11):     # doorways: 0 Hall of Presidents, 10 Reading Room, 11 Archive Stair
             for side in (-1, 1):
                 sa = a + side * niche_half * 0.75
-                box(f"door_drape_{side}", (0.2, 0.9, 5.0), ((wall_r + 0.4) * math.cos(sa), (wall_r + 0.4) * math.sin(sa), 2.5), "drapes", "velvet", rot=a)
-            box("door_glow", (0.05, 2 * wall_r * math.sin(niche_half) * 0.7, 4.6), ((wall_r + depth - 0.2) * cx, (wall_r + depth - 0.2) * cy, 2.4), "glow", "glow", rot=a)
+                box(f"door_drape_{k}_{side}", (0.2, 0.9, 5.0), ((wall_r + 0.4) * math.cos(sa), (wall_r + 0.4) * math.sin(sa), 2.5), "drapes", "velvet", rot=a)
+            box(f"door_glow_{k}", (0.05, 2 * wall_r * math.sin(niche_half) * 0.7, 4.6), ((wall_r + depth - 0.2) * cx, (wall_r + depth - 0.2) * cy, 2.4), "glow" if k != 11 else "glowblue", "glow" if k != 11 else "glowblue", rot=a)
         elif k == 9:   # screening wall
             box("screen_frame", (0.15, 4.2, 2.6), ((wall_r + depth - 0.25) * cx, (wall_r + depth - 0.25) * cy, 2.7), "trim", "gold", rot=a)
             box("screen_face", (0.05, 3.9, 2.3), ((wall_r + depth - 0.34) * cx, (wall_r + depth - 0.34) * cy, 2.7), "misc", "screen", rot=a)
@@ -479,6 +494,181 @@ def build_presidents():
     anchor("SCREEN", (0, 11.9, 6.5), rotz=math.pi)
 
 
+# ------------------------------------------------------------------ THE READING ROOM (tiered walnut cases, painted vault, rug)
+def shelf_wall(prefix, x0, x1, y, z0, z1, rows, facing, group="cases", seed=0):
+    """A run of bookcases with books along a wall from x0..x1 at depth y (facing +1 = books face +Y)."""
+    import random
+    rnd = random.Random(seed)
+    w, d = x1 - x0, 0.45
+    box(f"{prefix}_back", (w, 0.06, z1 - z0), ((x0 + x1) / 2, y - facing * d / 2, (z0 + z1) / 2), group, "walnut")
+    nbays = max(1, int(w / 1.2))
+    for b in range(nbays + 1):
+        x = x0 + b * w / nbays
+        box(f"{prefix}_post_{b}", (0.09, d, z1 - z0), (x, y, (z0 + z1) / 2), group, "walnut")
+    for r in range(rows + 1):
+        z = z0 + r * (z1 - z0) / rows
+        box(f"{prefix}_shelf_{r}", (w, d, 0.05), ((x0 + x1) / 2, y, z), group, "walnut")
+    # books: rows of thin boxes in three bindings, with gaps
+    hrow = (z1 - z0) / rows
+    for r in range(rows):
+        z = z0 + r * hrow + 0.03
+        x = x0 + 0.06
+        while x < x1 - 0.1:
+            bw = rnd.uniform(0.035, 0.07); bh = hrow * rnd.uniform(0.62, 0.86)
+            if rnd.random() < 0.05:
+                x += 0.12; continue
+            box(f"{prefix}_bk_{r}_{int(x*1000)}", (bw, d * 0.8, bh), (x + bw / 2, y + facing * 0.02, z + bh / 2), "books", rnd.choice(["books_a", "books_b", "books_c"]))
+            x += bw + 0.004
+
+
+def build_reading():
+    L, W, H = 16.0, 11.0, 12.0          # room along X, width along Y
+    box("floor", (L, W, 0.1), (0, 0, -0.05), "floor", "oak")
+    box("rug", (9, 5.2, 0.02), (0, 0, 0.01), "floor", "rug")
+    box("rug_border", (9.5, 5.7, 0.015), (0, 0, 0.005), "floor", "fresco_gold")
+    # three tiers of cases on the long walls, two on the end wall, balconies with brass rails
+    tiers = [(0.0, 3.4), (3.7, 6.9), (7.2, 10.2)]
+    for side in (-1, 1):
+        y = side * (W / 2 - 0.3)
+        for t, (z0, z1) in enumerate(tiers):
+            shelf_wall(f"case_{side}_{t}", -L / 2 + 0.4, L / 2 - 0.4, y, z0 + 0.1, z1, 5, -side, seed=t * 10 + side)
+            if t:
+                box(f"balc_{side}_{t}", (L - 0.6, 1.0, 0.12), (0, y - side * 0.75, z0 - 0.05), "balcony", "walnut")
+                box(f"rail_{side}_{t}", (L - 0.6, 0.05, 0.05), (0, y - side * 1.22, z0 + 1.0), "rails", "brass")
+                for i in range(40):
+                    box(f"bal_{side}_{t}_{i}", (0.03, 0.03, 1.0), (-L / 2 + 0.5 + i * (L - 1) / 39, y - side * 1.22, z0 + 0.5), "rails", "brass")
+    for t, (z0, z1) in enumerate(tiers[:2]):
+        shelf_wall(f"case_end_{t}", -W / 2 + 0.8, W / 2 - 0.8, 0, z0 + 0.1, z1, 5, 1, seed=99 + t)
+        bpy.context.view_layer.update()
+    # rotate the end-wall cases onto the far wall (x = +L/2)
+    for o in list(bpy.data.objects):
+        if o.name.startswith("case_end_") and o.type == "MESH":
+            x, y, z = o.location
+            o.location = (L / 2 - 0.3 + (y * 0), x, z)
+            o.rotation_euler[2] = math.pi / 2
+            o.location = (L / 2 - 0.3 - (o.location[0] - 0) * 0, x, z)
+    # near wall: tapestry, fireplace and the doorway back to the Great Hall
+    box("near_wall", (0.3, W, H), (-L / 2, 0, H / 2), "walls", "plaster")
+    box("tapestry", (0.05, 4.0, 3.0), (-L / 2 + 0.2, -3.0, 4.4), "walls", "tapestry")
+    box("fire_surround", (0.5, 2.4, 2.2), (-L / 2 + 0.35, 3.0, 1.1), "walls", "marble")
+    box("fire_glow", (0.05, 1.2, 0.8), (-L / 2 + 0.62, 3.0, 0.5), "glow", "glow")
+    box("door_frame", (0.4, 2.6, 3.6), (-L / 2 + 0.25, 0, 1.8), "trim", "gold")
+    box("door_glow", (0.05, 2.0, 3.2), (-L / 2 + 0.47, 0, 1.6), "glowblue", "glowblue")
+    # far wall top + side walls behind the cases
+    for side in (-1, 1):
+        box(f"side_wall_{side}", (L, 0.2, H), (0, side * W / 2, H / 2), "walls", "plaster")
+    box("far_wall", (0.2, W, H), (L / 2, 0, H / 2), "walls", "plaster")
+    # painted vault: a barrel of coffers in alternating fresco colours with gilt ribs
+    bm = bmesh.new()
+    seg, rows = 18, 10
+    grid = []
+    for j in range(rows + 1):
+        x = -L / 2 + j * L / rows
+        grid.append([bm.verts.new((x, -W / 2 * math.cos(i / seg * math.pi), 10.2 + 1.7 * math.sin(i / seg * math.pi))) for i in range(seg + 1)])
+    faces = []
+    for j in range(rows):
+        for i in range(seg):
+            faces.append(bm.faces.new((grid[j][i], grid[j + 1][i], grid[j + 1][i + 1], grid[j][i + 1])))
+    res = bmesh.ops.inset_individual(bm, faces=faces, thickness=0.12, depth=-0.12)
+    o = mesh_from_bm("vault", bm)
+    for m in ("fresco_blue", "fresco_gold", "fresco_rose", "gold"):
+        o.data.materials.append(M[m])
+    for p in o.data.polygons:
+        c = p.center
+        cell = (int((c.x + L / 2) / (L / rows)) + int((math.atan2(c.z - 10.2, -c.y) / math.pi) * seg)) % 3
+        p.material_index = 3 if abs(p.normal.z) < 0.2 and False else cell
+    GROUPS.setdefault("vault", []).append(o)
+    # display table with glass top in the middle
+    box("table", (3.4, 1.2, 0.85), (0, 0, 0.43), "furniture", "walnut")
+    box("table_glass", (3.2, 1.0, 0.04), (0, 0, 0.9), "furniture", "glass")
+    anchor("TABLE", (0, 0, 0.95), rotz=0)
+    anchor("SPAWN", (-L / 2 + 2.2, 0, 0), rotz=-math.pi / 2)
+    anchor("DOOR_BACK", (-L / 2 + 0.5, 0, 0), rotz=-math.pi / 2)
+    # case anchors for live books: one per bay on the ground tier of each long wall
+    k = 0
+    for side in (-1, 1):
+        for b in range(12):
+            x = -L / 2 + 1.0 + b * (L - 2) / 11
+            anchor(f"CASE_{k:02d}", (x, side * (W / 2 - 0.55), 0), rotz=(0 if side < 0 else math.pi))
+            k += 1
+    # lighting: warm chandeliers + window-like fill from the vault + fire
+    for x in (-4.5, 0, 4.5):
+        cyl(f"chand_{x}", 0.7, 0.12, 20, (x, 0, 8.6), 0.4, "trim", "brass")
+        for i in range(6):
+            a = i / 6 * math.tau
+            cyl(f"bulb_{x}_{i}", 0.06, 0.12, 8, (x + math.cos(a) * 0.6, math.sin(a) * 0.6, 8.72), 0.04, "glow", "glow")
+        light("POINT", (x, 0, 8.2), 160, size=0.8)
+    light("AREA", (0, 0, 11.5), 260, (1.0, 0.9, 0.75), size=8)
+    light("POINT", (-L / 2 + 1.2, 3.0, 0.8), 70, (1.0, 0.55, 0.25), size=0.5)
+    for side in (-1, 1):
+        for x in (-5, 0, 5):
+            light("POINT", (x, side * (W / 2 - 2.2), 5.4), 45, size=0.5)
+
+
+# ------------------------------------------------------------------ THE ARCHIVE STAIR (grand staircase, mezzanine, lanterns, ladders)
+def build_stair():
+    L, W, H = 18.0, 12.0, 11.0
+    box("floor", (L, W, 0.1), (0, 0, -0.05), "floor", "oak")
+    for side in (-1, 1):
+        box(f"wall_{side}", (L, 0.2, H), (0, side * W / 2, H / 2), "walls", "royal")
+    box("far_wall", (0.2, W, H), (L / 2, 0, H / 2), "walls", "royal")
+    box("near_wall", (0.2, W, H), (-L / 2, 0, H / 2), "walls", "royal")
+    # tall shelves on both long walls, ground and mezzanine levels
+    for side in (-1, 1):
+        y = side * (W / 2 - 0.3)
+        shelf_wall(f"low_{side}", -L / 2 + 0.6, L / 2 - 0.6, y, 0.1, 4.2, 6, -side, seed=40 + side)
+        shelf_wall(f"high_{side}", -L / 2 + 0.6, L / 2 - 0.6, y, 4.9, 9.6, 6, -side, seed=60 + side)
+        box(f"mezz_{side}", (L - 0.4, 2.0, 0.2), (0, y - side * 1.1, 4.6), "mezzanine", "walnut")
+        box(f"mezz_rail_{side}", (L - 0.4, 0.08, 0.08), (0, y - side * 2.05, 5.6), "rails", "walnut")
+        for i in range(30):
+            box(f"mezz_bal_{side}_{i}", (0.06, 0.06, 1.0), (-L / 2 + 0.4 + i * (L - 0.8) / 29, y - side * 2.05, 5.1), "rails", "walnut")
+        for x in (-6, 0, 6):                       # rolling ladders
+            ln = f"ladder_{side}_{x}"
+            for r in (-0.22, 0.22):
+                o = box(f"{ln}_rail_{r}", (0.05, 0.05, 4.6), (x + r, y - side * 0.5, 2.2), "ladders", "oak")
+                o.rotation_euler[0] = side * 0.18
+            for k in range(12):
+                o = box(f"{ln}_rung_{k}", (0.44, 0.04, 0.04), (x, y - side * (0.5 - 0.04 * (k - 6) * 0.18 * 2), 0.3 + k * 0.36), "ladders", "oak")
+    # grand staircase at the far end, rising to a landing and the mezzanines
+    steps = 18
+    for k in range(steps):
+        box(f"step_{k}", (0.42, 3.4, 0.25), (L / 2 - 6.4 + k * 0.32, 0, 0.125 + k * 0.255), "stairs", "walnut")
+    box("landing", (2.2, W - 0.4, 0.25), (L / 2 - 1.2, 0, 4.6), "stairs", "walnut")
+    for side in (-1, 1):
+        for k in range(0, steps, 2):
+            box(f"stair_bal_{side}_{k}", (0.07, 0.07, 1.0), (L / 2 - 6.4 + k * 0.32, side * 1.75, 0.6 + k * 0.255), "rails", "oak")
+        o = box(f"stair_rail_{side}", (6.2, 0.1, 0.1), (L / 2 - 3.6, side * 1.75, 3.35), "rails", "walnut")
+        o.rotation_euler[1] = -math.atan2(0.255, 0.32)
+    # tall window at the far wall top, cool daylight
+    box("window", (0.05, 2.4, 4.0), (L / 2 - 0.12, 0, 7.6), "window", "skylight")
+    # wooden ceiling with beams
+    box("ceiling", (L, W, 0.2), (0, 0, H), "ceiling", "walnut")
+    for i in range(9):
+        box(f"beam_{i}", (0.35, W, 0.45), (-L / 2 + 1 + i * (L - 2) / 8, 0, H - 0.3), "ceiling", "oak")
+    # desk with lamp, owl-free; lanterns hanging
+    box("desk", (2.4, 1.0, 0.9), (-4, -3.4, 0.45), "furniture", "walnut")
+    cyl("lamp_shade", 0.3, 0.35, 20, (-3.2, -3.4, 1.35), 0.18, "glow", "glow")
+    for x in (-5, 0, 5):
+        cyl(f"lantern_{x}", 0.22, 0.5, 8, (x, 0, 7.4), 0.22, "glow", "glow")
+        box(f"lantern_chain_{x}", (0.02, 0.02, 3.2), (x, 0, 9.3), "trim", "brass")
+        light("POINT", (x, 0, 7.2), 120, (1.0, 0.75, 0.45), size=0.4)
+    light("AREA", (L / 2 - 1.0, 0, 7.6), 300, (0.6, 0.75, 1.0), size=3, rot=(0, -math.pi / 2, 0))
+    light("POINT", (-3.2, -3.4, 1.6), 25, (1.0, 0.8, 0.5), size=0.2)
+    light("AREA", (0, 0, 10.4), 120, (1.0, 0.85, 0.7), size=10)
+    box("door_frame", (0.4, 2.6, 3.6), (-L / 2 + 0.25, 0, 1.8), "trim", "brass")
+    box("door_glow", (0.05, 2.0, 3.2), (-L / 2 + 0.47, 0, 1.6), "glow", "glow")
+    anchor("SPAWN", (-L / 2 + 2.2, 0, 0), rotz=-math.pi / 2)
+    anchor("DOOR_BACK", (-L / 2 + 0.5, 0, 0), rotz=-math.pi / 2)
+    # the thread: stations along the floor and up the stair (a story you walk through)
+    for k in range(12):
+        if k < 6:
+            p = (-L / 2 + 4.3 + k * 1.3, (-1) ** k * 1.6, 0)
+        else:
+            j = (k - 6) * 3
+            p = (L / 2 - 6.2 + j * 0.32, 0.9 * (-1) ** k, j * 0.255 + 0.25)
+        anchor(f"STATION_{k:02d}", p, rotz=-math.pi / 2)
+
+
 # ------------------------------------------------------------------ bake
 def bake_and_export(name):
     if A.unreal:
@@ -498,7 +688,7 @@ def bake_and_export(name):
             bpy.ops.object.join()
         o = bpy.context.view_layer.objects.active
         o.name = f"{name}_{g}"
-        if g in ("glow", "sky"):                       # emissive: keep as unbaked bright colour
+        if g in ("glow", "sky", "glowblue", "window"):                     # emissive: keep as unbaked bright colour
             o["emissive"] = 1
             continue
         if A.nobake:
@@ -560,9 +750,6 @@ def bake_and_export(name):
     log("exported", path, f"{os.path.getsize(path) / 1e6:.1f} MB")
 
 
-if A.scene == "hall":
-    build_hall()
-else:
-    build_presidents()
+{"hall": build_hall, "presidents": build_presidents, "reading": build_reading, "stair": build_stair}[A.scene]()
 log("built", A.scene, sum(len(v) for v in GROUPS.values()), "objects in", len(GROUPS), "bake groups")
-bake_and_export("great_hall" if A.scene == "hall" else "presidents_hall")
+bake_and_export({"hall": "great_hall", "presidents": "presidents_hall", "reading": "reading_room", "stair": "archive_stair"}[A.scene])

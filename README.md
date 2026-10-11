@@ -35,9 +35,35 @@ Optional: the tutor can use base1's Ollama (start it with `OLLAMA_ORIGINS=https:
 aloud with each sentence lit, the famous line of each speech, Who said it?, Order up!, longest and shortest speeches.
 In the 3D/VR Hall the gold doorway leads to the Presidents theater (47 pedestals, lectern, spotlight).
 
+## Laws, Congresses & threads (civics)
+
+`#/civics`: every presidency split into its Congresses (1st 1789 … 119th 2025, `sections/civics/congresses.json`) with
+the landmark founding acts, amendments, laws, executive acts and Supreme Court cases of each, stored as COG and linked to
+loc.gov. Each president's page shows his Congresses and landmarks. `#/threads`: guided threads, each station stored
+as COG. The first is **The Covenant Republic** (scribes: Chad Peters & Claude) — Knox and the Scottish Reformation,
+through the Scots-Irish Piedmont, to the Jacksonian and Reagan eras. Published by `tools/publish_civics.py`.
+
+## Comfort (eyes and VR)
+
+The eye button in Alexandria: paper / sepia / night / warm-night themes, text size, line spacing, an easy-read font
+(Atkinson Hyperlegible), reduced motion, read-aloud speed and a 20-20-20 eye-break reminder. VR: teleport only with a
+blink fade, snap turning (30°/45°), comfort vignette, seated mode, a lighter scene and foveated rendering. Baked sets keep
+big glowing surfaces soft so nothing glares. Settings stay on the viewer's device.
+
+## Install / offline
+
+Alexandria is an installable app (manifest + service worker): *Install* in the footer, and *Save the library for
+offline* caches every pack and 3D set. Desktop: `tools/package/Build Alexandria.exe.bat` makes `Alexandria.exe`
+(`alexandria_launcher.py`): it serves a local copy of this repo in its own window, works with no internet, and
+`Alexandria.exe --update` refreshes from GitHub; `--lan` serves it to other machines on the network.
+
 ## 3D sets (Blender → web/VR, and Unreal)
 
-`tools/blender/build_sets.py` builds the Great Hall rotunda and the Presidents theater procedurally, bakes them in
+Rooms: the Great Hall rotunda (two new doors: the Reading Room and the Archive Stair), the Presidents theater, the
+**Reading Room** (tiered walnut cases, brass-railed balconies, painted vault — one book per landmark, in time order)
+and the **Archive Stair** (tall shelves, mezzanines, ladders, lanterns and a grand stair — the thread's stations
+are plaques you walk past and climb).
+`tools/blender/build_sets.py` builds them procedurally, bakes them in
 Cycles, and exports `sets/*.glb` with named anchors that `alexandria/vr.js` fills with live content.
 `Build Alexandria Sets (RTX).bat` re-bakes at 2048 px / 256 samples on base1's GPU and also writes Unreal versions
 (`*_ue.glb`: colour + lights) for `tools/unreal/alexandria_unreal.py`, which builds Lumen levels in the ALEXANDERIA project.

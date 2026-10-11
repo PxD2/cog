@@ -7,8 +7,11 @@
 <meta name="description" content="A modern encyclopedia built entirely from COG numbered meanings on GitHub, with a tutor that answers only from its sources. On PC and in VR.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d1016">
+<link rel="apple-touch-icon" href="img/icon-180.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2311151c'/%3E%3Cpath d='M14 50h36M18 46V26M27 46V26M37 46V26M46 46V26M12 24l20-12 20 12z' stroke='%23d4ad3b' stroke-width='4' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script type="importmap">
 { "imports": {
@@ -34,6 +37,8 @@
     <a href="#/sources" data-nav="sources">Sources</a>
     <a href="#/media" data-nav="media">Media</a>
     <a href="#/presidents" data-nav="presidents">Presidents</a>
+    <a href="#/civics" data-nav="civics">Laws</a>
+    <a href="#/threads" data-nav="threads">Threads</a>
     <a href="#/quiz" data-nav="quiz">Quiz</a>
   </nav>
   <div class="tools">
@@ -42,6 +47,7 @@
       <button data-level="deeper" title="Explore deeper (6–12)">6–12</button>
     </div>
     <button class="icon" id="nums" title="Show COG numbers" aria-pressed="false">#</button>
+    <button class="icon" id="comfortBtn" title="Comfort: easier on the eyes, steadier in VR"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.2 1.5 12c1.2 2.8 5 7 10.5 7s9.3-4.2 10.5-7C21.3 9.2 17.5 5 12 5zm0 11.2A4.2 4.2 0 1 1 12 7.8a4.2 4.2 0 0 1 0 8.4zm0-6.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"/></svg></button>
     <button class="icon" id="theme" title="Light / dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2v16a8 8 0 0 1 0-16z"/></svg></button>
     <button class="pill" id="tutorBtn">Tutor</button>
     <button class="pill gold" id="vrBtn" title="Walk the library in VR (or in 3D on this screen)">Enter the Hall</button>
@@ -72,6 +78,7 @@
 
 <footer class="foot">
   <span>Every word here is stored as a COG address on GitHub and rebuilt in your browser.</span>
+  <span class="foot-actions"><button class="pill" id="installBtn" hidden>⤓ Install Alexandria</button><button class="pill" id="offlineBtn">Save the library for offline</button></span>
   <span id="trust"></span>
 </footer>
 <script type="module" src="app.js"></script>

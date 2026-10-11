@@ -99,7 +99,7 @@ export function sources() {         // primary-source documents in every other s
   if (!sourcesP) sourcesP = (async () => {
     const out = [];
     for (const s of await sections()) {
-      if (s.id === "encyclopedia") continue;
+      if (s.id === "encyclopedia" || s.id === "civics") continue;
       for (const e of await indexOf(s)) out.push({ ...e, section: s });
     }
     return out;
@@ -144,6 +144,31 @@ export async function search(q, limit = 30) {
     .sort((a, b) => b.s - a.s).slice(0, 12).map(x => x.e);
   return { articles: arts, sentences: sents, sources: srcs };
 }
+
+// ---------------------------------------------------------------- civics: Congresses, landmarks, threads
+let civP = null;
+export function civics() {
+  if (!civP) civP = (async () => {
+    const sec = (await sections()).find(s => s.id === "civics");
+    if (!sec) return { congresses: [], landmarks: [], sec: null };
+    const [cg, ix] = await Promise.all([getFile("sections/civics/congresses.json").catch(() => ({ congresses: [] })), indexOf(sec)]);
+    const latest = new Map();
+    for (const e of ix) latest.set(e.t, { ...e, section: sec });
+    const lms = [...latest.values()].sort((a, b) => (a.d || "").localeCompare(b.d || ""));
+    return { congresses: cg.congresses || [], landmarks: lms, sec };
+  })();
+  return civP;
+}
+export async function landmark(e) {
+  const d = (await getFile(e.section.files[e.f - 1], e.section.base)).docs[e.i];
+  const paras = await decode(d.seq);
+  return { ...d, text: paras.map(p => p.map(x => x.t).join(" ")).join(" "), addrs: paras.flat().map(x => x.a) };
+}
+export async function threads() { return (await getFile("sections/civics/threads/index.json").catch(() => ({ threads: [] }))).threads; }
+export async function thread(id) { return getFile(`sections/civics/threads/${id}.json`); }
+export const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+export const KINDS = { founding: ["✒", "Founding", "#c9a227"], amendment: ["Ⅹ", "Amendment", "#b5523b"], law: ["§", "Law", "#3aa37c"],
+  case: ["⚖", "Supreme Court", "#4f80c9"], executive: ["★", "President's act", "#9a62c2"] };
 
 // ---------------------------------------------------------------- Hall of Presidents
 let rosterP = null, speechesP = null, speechIdx = null;

@@ -3,6 +3,8 @@
 import * as C from "./core.js";
 import * as T from "./tutor.js";
 import * as P from "./presidents.js";
+import * as CV from "./civics.js";
+import * as CF from "./comfort.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -27,11 +29,15 @@ document.querySelectorAll("[data-level]").forEach(b => b.onclick = () => { state
 $("#nums").onclick = () => { state.nums = !state.nums; store.set("nums", state.nums ? "1" : "0"); syncChrome(); };
 const theme = store.get("theme", "");
 if (theme) document.documentElement.dataset.theme = theme;
+document.documentElement.dataset.userTheme = theme;
+CF.apply();
+document.getElementById("comfortBtn").onclick = () => CF.panel();
 $("#theme").onclick = () => {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;
   const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
   document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
   store.set("theme", document.documentElement.dataset.theme);
+  document.documentElement.dataset.userTheme = document.documentElement.dataset.theme;
   if (map) setTiles();
 };
 $("#trust").textContent = C.TRUST;
@@ -67,6 +73,9 @@ const srcHref = e => `#/src/${encodeURIComponent(e.section.id)}/${e.f}/${e.i}`;
 const srcLink = e => `<a href="${srcHref(e)}">${esc(e.t)}<small>${esc(e.section.title)} · ${esc(e.d || yearTxt(e.y))}</small></a>`;
 sugg.addEventListener("click", () => { sugg.hidden = true; q.value = ""; });
 
+// shared context for page modules
+const ctx = { get prose() { return prose; }, state, ask: q => { openTutor(); ask(q); }, rate: () => CF.get().rate, motion: () => CF.scrollBehavior() };
+
 // ------------------------------------------------------------------ router
 window.addEventListener("hashchange", route);
 async function route() {
@@ -75,7 +84,7 @@ async function route() {
   const [path, qs] = h.split("?");
   const p = new URLSearchParams(qs || "");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const navKey = ["president", "speech"].includes(parts[0]) ? "presidents" : (parts[0] || "");
+  const navKey = ["president", "speech"].includes(parts[0]) ? "presidents" : parts[0] === "thread" ? "threads" : (parts[0] || "");
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === navKey));
   document.body.dataset.page = { a: "article", m: "meaning", src: "media", section: "sources" }[parts[0]] || navKey || "home";
   state.slug = null;
@@ -89,7 +98,17 @@ async function route() {
     else if (parts[0] === "atlas") await atlas(p.get("a"));
     else if (parts[0] === "sources") await showSources();
     else if (parts[0] === "media") await mediaPage(p.get("f") || "");
-    else if (parts[0] === "presidents" || parts[0] === "president" || parts[0] === "speech") await P.render(view, parts, p, { prose, state, ask: q => { openTutor(); ask(q); } });
+    else if (parts[0] === "presidents" || parts[0] === "president" || parts[0] === "speech") {
+      await P.render(view, parts, p, ctx);
+      if (parts[0] === "president") {
+        const html = await CV.presidentCivics(+parts[1], ctx);
+        const nav = view.querySelector(".pres-nav");
+        if (html && nav) { nav.insertAdjacentHTML("beforebegin", html); CV.wirePresidentCivics(view, ctx); }
+      }
+    }
+    else if (parts[0] === "civics") await CV.civicsPage(view, p, ctx);
+    else if (parts[0] === "threads") await CV.threadsPage(view);
+    else if (parts[0] === "thread") await CV.threadPage(view, parts[1], p, ctx);
     else if (parts[0] === "section") await showSources(parts[1]);
     else if (parts[0] === "src") await showSource(parts[1], +parts[2], +parts[3]);
     else if (parts[0] === "quiz") await quizPage(p.get("a"), p.get("s"));
@@ -99,7 +118,7 @@ async function route() {
     view.innerHTML = `<div class="empty">Could not load that from GitHub (${esc(e.message)}). Check the connection and try again.</div>`;
   }
   view.focus({ preventScroll: true });
-  if (!p.get("s") && !p.get("y")) scrollTo({ top: 0 });
+  if (!p.get("s") && !p.get("y") && !p.get("p")) scrollTo({ top: 0 });
 }
 
 // ------------------------------------------------------------------ home
@@ -132,6 +151,10 @@ async function home() {
     </section></div>
     <a class="hall-banner" href="#/presidents"><span class="medal big" style="--era:#c9a227"><b>47</b><i>★</i></span>
       <span><p class="kicker">New · The Hall of Presidents</p><b>Every president. Every inaugural address, word for word.</b><small>Roll call · speeches that light up as they're spoken · Who said it? · Order up!</small></span><span class="pill gold">Enter →</span></a>
+    <div class="banner-pair">
+      <a class="hall-banner thread-banner" href="#/thread/covenant-republic"><span><p class="kicker">Guided thread · scribes: Chad Peters &amp; Claude</p><b>The Covenant Republic</b><small>From Knox and Lex Rex to Mecklenburg, the Bill of Rights, Jackson, Polk and Reagan — one station at a time.</small></span><span class="pill gold">Begin →</span></a>
+      <a class="hall-banner laws-banner" href="#/civics"><span><p class="kicker">Laws, Amendments &amp; the Court</p><b>Every president, every Congress</b><small>119 Congresses with the landmark laws, amendments and Supreme Court cases of each.</small></span><span class="pill gold">Open →</span></a>
+    </div>
     <section class="section"><div class="row-head"><h2>Subjects</h2><a href="#/explore">All articles →</a></div>
       <div class="subjects">${Object.entries(C.SUBJECTS).filter(([n]) => counts[n]).map(([n, v]) =>
         `<a class="subject" href="#/subject/${encodeURIComponent(n)}" style="--accent:${v.c}"><i>${v.i}</i><span><b>${esc(n)}</b><small>${counts[n]} articles</small></span></a>`).join("")}</div></section>
@@ -219,7 +242,7 @@ function speak(root, btn) {
     el.classList.add("speak");
     el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const u = new SpeechSynthesisUtterance(el.textContent);
-    u.rate = state.level === "young" ? 0.92 : 1;
+    u.rate = (state.level === "young" ? 0.92 : 1) * CF.get().rate;
     u.onend = next; u.onerror = next;
     speechSynthesis.speak(u);
   };
@@ -440,6 +463,20 @@ $("#vrBtn").onclick = async () => {
   mod.enter(hall, { level: state.level, onExit: () => { hall.hidden = true; } });
 };
 $("#hallExit").onclick = async () => { (await import("./vr.js")).exit(); };
+
+// ------------------------------------------------------------------ installable + offline
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+let installEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
+$("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
+$("#offlineBtn").onclick = async () => {
+  const b = $("#offlineBtn");
+  const reg = await navigator.serviceWorker?.ready.catch(() => null);
+  if (!reg || !reg.active) { b.textContent = "Offline needs a newer browser"; return; }
+  const ch = new MessageChannel();
+  ch.port1.onmessage = ev => { const m = ev.data; b.textContent = m.error ? "Could not save: " + m.error : m.finished ? "✓ Saved — Alexandria works offline" : `Saving… ${m.done} of ${m.total}`; };
+  reg.active.postMessage({ type: "cacheAll" }, [ch.port2]);
+};
 
 syncChrome();
 route();

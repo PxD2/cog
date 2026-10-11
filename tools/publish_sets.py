@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish the Alexandria 3D sets and hero pictures to GitHub (PxD2/cog), where the web and VR Hall load them.
 
-    python publish_sets.py              # sets\\great_hall.glb, sets\\presidents_hall.glb -> cog/sets/ ; rotunda.jpg, theater.jpg -> cog/alexandria/img/
+    python publish_sets.py              # sets\\{great_hall,presidents_hall,reading_room,archive_stair}.glb -> cog/sets/ ; rotunda/theater/reading/stair.jpg -> cog/alexandria/img/
     python publish_sets.py --dry-run
 
 Only the web sets go up (baked light, a few MB each). The Unreal sets (*_ue.glb) and .blend files stay on base1.
@@ -17,7 +17,9 @@ import cog_absorber as A        # noqa: E402
 
 SETS = HERE / "sets"
 MAP = {"great_hall.glb": "sets/great_hall.glb", "presidents_hall.glb": "sets/presidents_hall.glb",
-       "rotunda.jpg": "alexandria/img/rotunda.jpg", "theater.jpg": "alexandria/img/theater.jpg"}
+       "reading_room.glb": "sets/reading_room.glb", "archive_stair.glb": "sets/archive_stair.glb",
+       "rotunda.jpg": "alexandria/img/rotunda.jpg", "theater.jpg": "alexandria/img/theater.jpg",
+       "reading.jpg": "alexandria/img/reading.jpg", "stair.jpg": "alexandria/img/stair.jpg"}
 LIMIT = 50 * 1024 * 1024          # GitHub warns at 50 MB and rejects 100 MB
 
 

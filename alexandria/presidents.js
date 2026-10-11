@@ -1,6 +1,7 @@
 // Hall of Presidents — every president on a stage, every inaugural address word for word (from the COG packs),
 // a roll call, speeches read aloud with each sentence lighting up, and games for young readers.
 import * as C from "./core.js";
+import * as CF from "./comfort.js";
 
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
@@ -29,7 +30,7 @@ function say(text, n, onend) {
   if (!("speechSynthesis" in window)) { onend && setTimeout(onend, 1500); return; }
   const u = new SpeechSynthesisUtterance(text), v = voiceFor(n);
   if (v.voice) u.voice = v.voice;
-  u.pitch = v.pitch; u.rate = v.rate;
+  u.pitch = v.pitch; u.rate = v.rate * CF.get().rate;
   u.onend = () => onend && onend(); u.onerror = () => onend && onend();
   speechSynthesis.speak(u);
 }

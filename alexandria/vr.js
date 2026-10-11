@@ -12,9 +12,13 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import * as C from "./core.js";
 import * as T from "./tutor.js";
 import { ERAS, eraOf } from "./presidents.js";
+import * as CF from "./comfort.js";
 
 const SETS = new URL("../sets/", import.meta.url).href;
 const PRES_OFFSET = new THREE.Vector3(0, 0, -120);       // the theater is built away from the rotunda
+const READ_OFFSET = new THREE.Vector3(140, 0, 0);        // the Reading Room (Laws, Amendments & the Court)
+const STAIR_OFFSET = new THREE.Vector3(-140, 0, 0);      // the Archive Stair (guided threads)
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 let R = null;
 
 // ------------------------------------------------------------------ helpers
@@ -84,9 +88,9 @@ async function loadSet(name) {
     if (o.isMesh) {
       const src = o.material;
       if (o.userData.baked && src.map) { o.material = new THREE.MeshBasicMaterial({ map: src.map, side: THREE.DoubleSide }); o.material.map.colorSpace = THREE.SRGBColorSpace; }
-      else if (o.userData.emissive) o.material = new THREE.MeshBasicMaterial({ color: src.color.clone().multiplyScalar(2.2) });
+      else if (o.userData.emissive) o.material = new THREE.MeshBasicMaterial({ color: src.color.clone().multiplyScalar(/window/i.test(o.name) ? 0.75 : 2.2) });   // big glowing panes stay soft (eye comfort)
       o.userData.surface = true;
-    } else if (/^(NICHE_\d|ORB|SPAWN|P\d\d|LECTERN|SCREEN)$/.test(o.name)) anchors[o.name] = o;
+    } else if (/^(NICHE_\d+|ORB|SPAWN|P\d\d|LECTERN|SCREEN|CASE_\d\d|TABLE|DOOR_BACK|STATION_\d\d)$/.test(o.name)) anchors[o.name] = o;
   });
   return { root: gltf.scene, anchors };
 }
@@ -115,6 +119,23 @@ export async function enter(host, opts = {}) {
   const rig = new THREE.Group(); scene.add(rig);
   const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.05, 400);
   camera.position.set(0, 1.6, 0); rig.add(camera);
+  // ---- comfort: blink fade for every jump, a vignette while turning or gliding, snap turning, seated height
+  const fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false });
+  const fadeSphere = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), fadeMat); fadeSphere.renderOrder = 999; fadeSphere.visible = false; camera.add(fadeSphere);
+  const vigTex = canvasTex(256, 256, (ctx, W, H) => { const g = ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 0.5); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,1)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); });
+  const vig = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: vigTex, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+  vig.position.z = -0.12; vig.renderOrder = 998; camera.add(vig);
+  let fadeT = 0, fadeCb = null, vigWant = 0, turnLatch = false;
+  function blink(cb) { if (CF.reducedMotion() && !renderer.xr.isPresenting) { cb(); return; } fadeT = 0.0001; fadeCb = cb; fadeSphere.visible = true; }
+  function jump(p) { blink(() => { rig.position.copy(p); target = null; }); }
+  function turnRig(angle) { const c = new THREE.Vector3(); camera.getWorldPosition(c); rig.position.sub(c).applyAxisAngle(Y_AXIS, angle).add(c); rig.rotation.y += angle; }
+  renderer.xr.setFoveation(1);
+  renderer.xr.setFramebufferScaleFactor(CF.get().vrLight ? 0.8 : 1.0);
+  renderer.xr.addEventListener("sessionstart", () => {
+    rig.position.y = CF.get().vrSeated ? 0.45 : 0;
+    if (CF.get().vrLight) { motes.visible = false; shaft.visible = false; }
+  });
+  renderer.xr.addEventListener("sessionend", () => { rig.position.y = 0; motes.visible = true; shaft.visible = true; });
   scene.add(new THREE.HemisphereLight(0xfff1d6, 0x10131a, 1.2));     // only lights the live (unbaked) objects
 
   // post-processing on screens (not in the headset): bloom makes gold, glow and the oculus shine
@@ -178,6 +199,13 @@ export async function enter(host, opts = {}) {
   door.position.copy(at(doorA, 0, 2.4, -1.2)); door.quaternion.copy(faceQ(doorA)); door.userData.door = "presidents";
   hallGroup.add(door); pickables.push(door);
   const doorLab = label("★  The Hall of Presidents  ★", 3.4, 0.46, { px: 58 }); doorLab.position.copy(at(doorA, 0, 5.75, 0.6)); doorLab.quaternion.copy(door.quaternion); hallGroup.add(doorLab);
+  // doorways to the Reading Room (niche 10) and the Archive Stair (niche 11), when the rotunda has them
+  [["NICHE_10", "reading", "§  The Reading Room · Laws & the Court"], ["NICHE_11", "stair", "✦  The Archive Stair · Guided threads"]].forEach(([nm, kind, text]) => {
+    const an = anchors[nm]; if (!an) return;
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.6), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    d.position.copy(at(an, 0, 2.4, -1.2)); d.quaternion.copy(faceQ(an)); d.userData.door = kind; hallGroup.add(d); pickables.push(d);
+    const l = label(text, 3.6, 0.46, { px: 52 }); l.position.copy(at(an, 0, 5.75, 0.6)); l.quaternion.copy(faceQ(an)); hallGroup.add(l);
+  });
   // screening wall (niche 9)
   const screen = buildScreen(anchors.NICHE_9);
 
@@ -215,7 +243,16 @@ export async function enter(host, opts = {}) {
     if (o.userData.door === "hall") return goHall();
     if (o.userData.pres) return pres && pres.spot(o.userData.pres);
     if (o.userData.roll) return pres && pres.roll();
-    if (o.userData.floor) { target = hit.point.clone(); target.y = 0; }
+    if (o.userData.door === "reading") return goRoom("reading");
+    if (o.userData.door === "stair") return goRoom("stair");
+    if (o.userData.landmark) return panel.landmark(o.userData.landmark);
+    if (o.userData.station != null) return rooms.stair && rooms.stair.open(o.userData.station);
+    if (o.userData.btn2) return panel.press(o.userData.btn2);
+    if (o.userData.floor) {
+      const t = hit.point.clone(); t.y = rig.position.y;
+      const teleport = renderer.xr.isPresenting ? CF.get().vrTeleportOnly : CF.reducedMotion();
+      if (teleport) jump(t); else target = t;
+    }
   }
   function placePanel(near) {
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
@@ -329,11 +366,107 @@ export async function enter(host, opts = {}) {
   async function goPresidents() {
     hint("Opening the Hall of Presidents…");
     if (!pres) pres = await buildPresidents();
-    rig.position.copy(pres.spawn); yaw = 0; pitch = 0.05; target = null; panel.group.visible = false;
+    const sp = pres.spawn.clone(); sp.y = rig.position.y; jump(sp); rig.rotation.y = 0; yaw = 0; pitch = 0.05; panel.group.visible = false;
     const bar = host.querySelector(".hall-bar b"); if (bar) bar.textContent = "The Hall of Presidents";
     hint("The Hall of Presidents · select a president to hear him speak · Roll call to meet them all");
   }
-  function goHall() { const bar = host.querySelector(".hall-bar b"); if (bar) bar.textContent = "The Great Hall"; rig.position.copy(anchors.SPAWN.getWorldPosition(new THREE.Vector3())); yaw = 0; pitch = 0; target = null; panel.group.visible = false; speechSynthesis.cancel(); hint(defaultHint); }
+  function goHall() { const bar = host.querySelector(".hall-bar b"); if (bar) bar.textContent = "The Great Hall"; const sp = anchors.SPAWN.getWorldPosition(new THREE.Vector3()); sp.y = rig.position.y; jump(sp); rig.rotation.y = 0; yaw = 0; pitch = 0; panel.group.visible = false; speechSynthesis.cancel(); hint(defaultHint); }
+
+  // ---- the Reading Room (laws, amendments, the Court) and the Archive Stair (guided threads), built on first visit
+  const rooms = {};
+  async function goRoom(kind) {
+    hint(kind === "reading" ? "Opening the Reading Room…" : "Opening the Archive Stair…");
+    if (!rooms[kind]) rooms[kind] = await (kind === "reading" ? buildReading() : buildStair());
+    const r = rooms[kind]; if (!r) { hint("That room is not built yet — publish the 3D sets"); return; }
+    const sp = r.spawn.clone(); sp.y = rig.position.y; jump(sp); rig.rotation.y = 0; yaw = r.yaw; pitch = 0.02; panel.group.visible = false;
+    const bar = host.querySelector(".hall-bar b"); if (bar) bar.textContent = r.title;
+    hint(r.hint);
+  }
+  function backDoor(g, A) {
+    const an = A.DOOR_BACK; if (!an) return;
+    const p = an.getWorldPosition(new THREE.Vector3()), q = an.getWorldQuaternion(new THREE.Quaternion());
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    d.position.copy(p).add(new THREE.Vector3(0, 1.6, 0)); d.quaternion.copy(q).multiply(HALF); d.userData.door = "hall"; scene.add(d); g.attach(d); pickables.push(d);
+    const l = label("◀  Back to the Great Hall", 2.4, 0.34, { button: true, px: 54 }); l.position.copy(p).add(new THREE.Vector3(0, 3.55, 0)); l.quaternion.copy(d.quaternion);
+    l.position.add(new THREE.Vector3(0, 0, 0)); scene.add(l); g.attach(l);
+  }
+  async function buildReading() {
+    let set; try { set = await loadSet("reading_room.glb"); } catch (e) { return null; }
+    const g = new THREE.Group(); g.position.copy(READ_OFFSET); scene.add(g); g.add(set.root); g.updateMatrixWorld(true);
+    const A = set.anchors;
+    set.root.traverse(o => { if (o.isMesh && /floor/i.test(o.name)) { o.userData.floor = "reading"; floors.push(o); } });
+    const { landmarks } = await C.civics();
+    const cases = Object.keys(A).filter(k => /^CASE_/.test(k)).sort((a, b) => {
+      const pa = A[a].getWorldPosition(new THREE.Vector3()), pb = A[b].getWorldPosition(new THREE.Vector3());
+      return (Math.sign(pa.z) - Math.sign(pb.z)) || (pa.x - pb.x);         // walk down one wall, then the other
+    });
+    const per = Math.max(1, Math.ceil(landmarks.length / Math.max(1, cases.length)));
+    landmarks.forEach((e, i) => {
+      const an = A[cases[Math.floor(i / per)]]; if (!an) return;
+      const j = i % per, k = C.KINDS[e.lk] || ["•", "", "#8b929a"], col = new THREE.Color(k[2]);
+      const book = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.56, 0.3), [
+        new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.45) }), new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.45) }),
+        new THREE.MeshStandardMaterial({ color: 0xe9e0c8 }), new THREE.MeshStandardMaterial({ color: 0xe9e0c8 }),
+        new THREE.MeshStandardMaterial({ map: spineTex(`${e.t} · ${String(e.d).slice(0, 4)}`, col), roughness: 0.55 }), new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.4) })]);
+      book.position.copy(an.localToWorld(new THREE.Vector3(-0.48 + j * 0.32, 1.74, 0.1)));
+      book.quaternion.copy(an.getWorldQuaternion(new THREE.Quaternion())).multiply(HALF);
+      book.userData.landmark = e; scene.add(book); g.attach(book); pickables.push(book);
+    });
+    if (A.TABLE) {
+      const p = A.TABLE.getWorldPosition(new THREE.Vector3());
+      const l = label("§  Laws, Amendments & the Court — one book for each landmark, in time order", 5.2, 0.36, { px: 46 }); l.position.copy(p).add(new THREE.Vector3(0, 1.4, 0)); l.rotation.y = -Math.PI / 2; scene.add(l); g.attach(l);
+      const legend = label(Object.values(C.KINDS).map(k => `${k[0]} ${k[1]}`).join("   "), 5.2, 0.28, { px: 40 }); legend.position.copy(p).add(new THREE.Vector3(0, 1.0, 0)); legend.rotation.y = -Math.PI / 2; scene.add(legend); g.attach(legend);
+    }
+    backDoor(g, A);
+    const spawn = (A.SPAWN || A.DOOR_BACK).getWorldPosition(new THREE.Vector3());
+    scene.add(dust(500, 6, 9, new THREE.Vector3(READ_OFFSET.x, 0, 0)));
+    return { spawn, yaw: -Math.PI / 2, title: "The Reading Room", hint: "Laws, Amendments & the Court · select a book to read it · the door behind you leads back" };
+  }
+  async function buildStair() {
+    let set; try { set = await loadSet("archive_stair.glb"); } catch (e) { return null; }
+    const g = new THREE.Group(); g.position.copy(STAIR_OFFSET); scene.add(g); g.add(set.root); g.updateMatrixWorld(true);
+    const A = set.anchors;
+    set.root.traverse(o => { if (o.isMesh && /floor|stairs/i.test(o.name)) { o.userData.floor = "stair"; floors.push(o); } });
+    const th = await C.thread("covenant-republic").catch(() => null);
+    const spawn = (A.SPAWN || A.DOOR_BACK).getWorldPosition(new THREE.Vector3());
+    const names = Object.keys(A).filter(k => /^STATION_/.test(k)).sort();
+    const spots = names.map(k => A[k].getWorldPosition(new THREE.Vector3()));
+    const last = spots[spots.length - 1] || spawn.clone();
+    const stations = th ? th.stations : [];
+    while (spots.length < stations.length) { const i = spots.length - names.length + 1; spots.push(last.clone().add(new THREE.Vector3(0.6, 0.65, (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 1.3))); }
+    // floor stations: start a comfortable 2 m from the door, 1.3 m apart
+    spots.forEach((p, i) => { if (i < 6 && names[i]) p.x = spawn.x + 2.1 + i * 1.3; });
+    stations.forEach((st, i) => {
+      const p = spots[i];
+      const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.56), new THREE.MeshBasicMaterial({ map: canvasTex(640, 448, (ctx, W, H) => {
+        ctx.fillStyle = "rgba(14,10,6,.9)"; rr(ctx, 0, 0, W, H, 34); ctx.fill(); ctx.strokeStyle = "#e9c55a"; ctx.lineWidth = 6; rr(ctx, 4, 4, W - 8, H - 8, 30); ctx.stroke();
+        ctx.fillStyle = "#e9c55a"; ctx.font = "600 34px JetBrains Mono, monospace"; ctx.textAlign = "center"; ctx.fillText(`${i + 1} · ${String(st.date).slice(0, 4)}`, W / 2, 86);
+        ctx.fillStyle = "#f6ecd2"; ctx.font = "650 46px Fraunces, Georgia, serif"; let y = 170; for (const l of wrap(ctx, st.title, W - 70).slice(0, 4)) { ctx.fillText(l, W / 2, y); y += 56; }
+      }), transparent: true, depthWrite: false }));
+      plaque.position.copy(p).add(new THREE.Vector3(0, 1.45, 0)); plaque.lookAt(spawn.x, plaque.position.y, spawn.z); plaque.userData.station = i;
+      scene.add(plaque); g.attach(plaque); pickables.push(plaque);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 1.15, 10), new THREE.MeshStandardMaterial({ color: 0xb08a3e, metalness: 0.7, roughness: 0.35 }));
+      post.position.copy(p).add(new THREE.Vector3(0, 0.58, 0)); scene.add(post); g.attach(post);
+      const glow = new THREE.PointLight(0xffd59a, 2.2, 3, 2); glow.position.copy(p).add(new THREE.Vector3(0, 1.9, 0)); scene.add(glow); g.attach(glow);
+    });
+    backDoor(g, A);
+    scene.add(dust(500, 7, 10, new THREE.Vector3(STAIR_OFFSET.x, 0, 0)));
+    let cur = 0;
+    async function open(i) {
+      if (!th) return;
+      cur = (i + stations.length) % stations.length;
+      const st = stations[cur];
+      const paras = await C.decode(st.seq);
+      panel.station(th, cur, st, paras.map(p => p.map(x => x.t).join(" ")));
+    }
+    function go(i) {
+      const k = (i + stations.length) % stations.length, p = spots[k].clone();
+      const toward = spawn.clone().sub(p).setY(0).normalize().multiplyScalar(1.4);
+      p.add(toward); p.y = Math.max(rig.position.y, spots[k].y);
+      jump(p); setTimeout(() => open(k), 260);
+    }
+    return { spawn, yaw: -Math.PI / 2, title: "The Archive Stair", hint: "The Covenant Republic · select a station to read it · Next stop walks you on", open, go, get cur() { return cur; } };
+  }
 
   // ---- reading panel
   function makePanel() {
@@ -345,6 +478,9 @@ export async function enter(host, opts = {}) {
     group.add(new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.33), new THREE.MeshBasicMaterial({ map: tex, transparent: true })));
     const mk = (txt, x) => { const b = label(txt, 0.2, 0.09, { button: true, px: 40 }); b.position.set(x, -0.74, 0.01); b.userData.btn = txt; return b; };
     const buttons = [mk("◀ Prev", -0.44), mk("Next ▶", -0.22), mk("Level", 0), mk("Listen", 0.22), mk("✕", 0.44)];
+    const nextStop = label("Next stop  ▶", 0.36, 0.1, { button: true, px: 44, color: "#e9c55a" }); nextStop.position.set(0.35, 0.74, 0.01); nextStop.userData.btn = "stop"; nextStop.visible = false;
+    const prevStop = label("◀  Last stop", 0.36, 0.1, { button: true, px: 44 }); prevStop.position.set(-0.35, 0.74, 0.01); prevStop.userData.btn = "laststop"; prevStop.visible = false;
+    buttons.push(nextStop, prevStop);
     buttons.forEach(b => group.add(b));
     const S = { slug: null, title: "", kicker: "", pages: [], page: 0, level: opts.level || "deeper", mode: "read", sents: [], n: 0, hi: -1 };
     function draw() {
@@ -381,6 +517,7 @@ export async function enter(host, opts = {}) {
       const pg = S.pages.findIndex(p => p.some(l => l.k === k)); if (pg >= 0) S.page = pg; draw();
     }
     async function open(slug) {
+      nextStop.visible = prevStop.visible = false;
       const a = await C.article(slug);
       const lv = a.levels[S.level] ? S.level : Object.keys(a.levels)[0];
       const paras = await C.decode(a.levels[lv]);
@@ -393,7 +530,17 @@ export async function enter(host, opts = {}) {
       setText(`${ordinal(p.n).toUpperCase()} PRESIDENT · ${(d.occasion || "SPEECH").toUpperCase()} · ${d.date || ""}`, p.name,
         (d.key_text ? [`★ “${d.key_text}”`, "\n"] : []).concat(paras.flatMap((q, i) => (i ? ["\n"] : []).concat(q.map(x => x.t)))), true);
     }
-    function show(title, text, n) { S.mode = "info"; S.n = n || 0; setText("THE HALL OF PRESIDENTS", title, text.split("\n").map(x => x || "\n"), true); }
+    async function landmark(e) {
+      const d = await C.landmark(e);
+      S.mode = "info"; S.n = d.pres || 0; nextStop.visible = prevStop.visible = false;
+      const k = C.KINDS[e.lk] || ["", ""];
+      setText(`${k[1].toUpperCase()} · ${d.date}${d.congress ? " · " + C.ordinal(d.congress).toUpperCase() + " CONGRESS" : ""}`, d.title, [d.text, "\n", "Primary source: Library of Congress — open it on the page."], true);
+    }
+    function station(th, i, st, texts) {
+      S.mode = "station"; S.n = 0; nextStop.visible = prevStop.visible = true;
+      setText(`${th.title.toUpperCase()} · STOP ${i + 1} OF ${th.stations.length} · ${st.date}`, st.title, texts.concat(["\n", `Scribes: ${th.scribes}`]), true);
+    }
+    function show(title, text, n) { S.mode = "info"; nextStop.visible = prevStop.visible = false; S.n = n || 0; setText("THE HALL OF PRESIDENTS", title, text.split("\n").map(x => x || "\n"), true); }
     async function tutor(q) {
       const day = Math.floor(Date.now() / 864e5);
       const focus = S.slug || (arts[day % arts.length] || {}).slug;
@@ -423,10 +570,12 @@ export async function enter(host, opts = {}) {
       else if (b.startsWith("Next")) S.page = Math.min(S.pages.length - 1, S.page + 1);
       else if (b === "Level" && S.mode === "read") { S.level = S.level === "young" ? "deeper" : "young"; return open(S.slug); }
       else if (b === "Listen") return listen();
+      else if (b === "stop" && rooms.stair) return rooms.stair.go(rooms.stair.cur + 1);
+      else if (b === "laststop" && rooms.stair) return rooms.stair.go(rooms.stair.cur - 1);
       else if (b === "✕") { group.visible = false; speechSynthesis.cancel(); if (reading) reading.stop = true; reading = null; return; }
       draw();
     }
-    return { group, buttons, open, speech, show, tutor, press };
+    return { group, buttons, open, speech, show, tutor, press, landmark, station };
   }
 
   // ---- loop
@@ -450,10 +599,31 @@ export async function enter(host, opts = {}) {
       if (keys.has("d") || keys.has("arrowright")) rig.position.addScaledVector(r, sp);
     }
     if (target) { rig.position.lerp(target, Math.min(1, dt * 4)); if (rig.position.distanceTo(target) < 0.02) target = null; }
+    // comfort: blink fade, vignette while moving or turning, thumbstick turning in the headset
+    if (fadeT > 0) {
+      fadeT += dt;
+      if (fadeT < 0.12) fadeMat.opacity = fadeT / 0.12;
+      else { if (fadeCb) { const cb = fadeCb; fadeCb = null; cb(); } fadeMat.opacity = Math.max(0, 1 - (fadeT - 0.12) / 0.14); if (fadeT > 0.26) { fadeT = 0; fadeMat.opacity = 0; fadeSphere.visible = false; } }
+    }
+    vigWant = 0;
+    const sess = renderer.xr.getSession && renderer.xr.getSession();
+    if (sess) {
+      const mode = CF.get().vrTurn;
+      for (const src of sess.inputSources) {
+        const ax = src.gamepad && src.gamepad.axes; if (!ax || ax.length < 4) continue;
+        const x = ax[2];
+        if (mode === "smooth") { if (Math.abs(x) > 0.2) { turnRig(-x * dt * 1.4); vigWant = 1; } }
+        else if (Math.abs(x) > 0.75 && !turnLatch) { turnLatch = true; turnRig((x > 0 ? -1 : 1) * (mode === "snap45" ? Math.PI / 4 : Math.PI / 6)); vigWant = 1; vig.material.opacity = 0.9; }
+        else if (Math.abs(x) < 0.3) turnLatch = false;
+      }
+    }
+    if (target) vigWant = 1;
+    const vgoal = CF.get().vrVignette ? vigWant * 0.88 : 0;
+    vig.material.opacity += (vgoal - vig.material.opacity) * Math.min(1, dt * 10);
     if (renderer.xr.isPresenting) renderer.render(scene, camera); else composer.render();
   });
   R = { renderer, host, vrb, onExit: opts.onExit, cleanup: () => { if (screen) screen.stop(); removeEventListener("resize", onResize); removeEventListener("keydown", kd); removeEventListener("keyup", ku); } };
-  window.__hall = { scene, camera, panel, rig, screen, goPresidents, goHall, get pres() { return pres; }, setView: (y, p) => { yaw = y; pitch = p; } };
+  window.__hall = { scene, camera, panel, rig, screen, goPresidents, goHall, goRoom, rooms, get pres() { return pres; }, setView: (y, p) => { yaw = y; pitch = p; } };
 }
 const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 

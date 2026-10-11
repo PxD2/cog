@@ -415,6 +415,7 @@ class Window(QMainWindow):
         btns = QHBoxLayout()
         for text, fn in [("Refresh", self.refresh), ("Open Alexandria", lambda: webbrowser.open(SITE + "alexandria/")),
                          ("Publish articles", self.publish_articles), ("Publish presidents", self.publish_presidents),
+                         ("Publish laws & threads", self.publish_civics),
                          ("Publish 3D sets", self.publish_sets), ("Sync Obsidian", self.sync_vault),
                          ("Open repo on GitHub", lambda: webbrowser.open(f"https://github.com/{self.s['repo']}")),
                          ("Open log file", self.open_log)]:
@@ -747,6 +748,9 @@ class Window(QMainWindow):
             self.say(f"Put the inaugural corpus (1789-Washington.txt …) in {corpus}")
             return
         self._run_script("Publish the Hall of Presidents (roster + inaugural addresses)", ["publish_presidents.py", "--corpus", str(corpus)])
+
+    def publish_civics(self):
+        self._run_script("Publish laws, amendments, cases, Congresses and the Covenant Republic thread", ["publish_civics.py"])
 
     def publish_sets(self):
         self._run_script("Publish the 3D sets and hero pictures", ["publish_sets.py"])

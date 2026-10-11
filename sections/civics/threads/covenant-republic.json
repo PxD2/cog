@@ -1,0 +1,196 @@
+{
+ "id": "covenant-republic",
+ "title": "The Covenant Republic",
+ "subtitle": "From Knox to the Piedmont presidents, and on to Reagan",
+ "scribes": "Chad Peters & Claude",
+ "stations": [
+  {
+   "date": "1560",
+   "title": "John Knox and the Scottish Reformation",
+   "seq": "6903.0 6904.0",
+   "links": {
+    "articles": [
+     "protestant-reformation"
+    ]
+   },
+   "pres": null
+  },
+  {
+   "date": "1644",
+   "title": "Lex Rex",
+   "seq": "6905.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1689",
+   "title": "English Bill of Rights",
+   "seq": "6906.0 6907.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1740",
+   "title": "The Great Wagon Road",
+   "seq": "6908.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1758",
+   "title": "Alexander Craighead at Sugar Creek",
+   "seq": "6909.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1768",
+   "title": "John Witherspoon comes to Princeton",
+   "seq": "6910.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1775-05-31",
+   "title": "Mecklenburg Resolves",
+   "seq": "6911.0 6912.0 6913.0",
+   "links": {
+    "landmarks": [
+     "Mecklenburg Resolves"
+    ]
+   },
+   "pres": null
+  },
+  {
+   "date": "1781-02-01",
+   "title": "Cowan's Ford",
+   "seq": "6914.0 6915.0",
+   "links": {},
+   "pres": null
+  },
+  {
+   "date": "1788-08-02",
+   "title": "Hillsborough: the great refusal",
+   "seq": "6916.0",
+   "links": {
+    "landmarks": [
+     "Hillsborough Convention",
+     "North Carolina ratifies"
+    ]
+   },
+   "pres": null
+  },
+  {
+   "date": "1791-12-15",
+   "title": "The Bill of Rights",
+   "seq": "6917.0",
+   "links": {
+    "landmarks": [
+     "Bill of Rights (Amendments 1–10)"
+    ],
+    "articles": [
+     "bill-of-rights"
+    ]
+   },
+   "pres": 1
+  },
+  {
+   "date": "1829",
+   "title": "Jacksonian democracy",
+   "seq": "6918.0 6919.0 6920.0",
+   "links": {
+    "presidents": [
+     7
+    ],
+    "landmarks": [
+     "Indian Removal Act",
+     "Jackson's Bank veto",
+     "Worcester v. Georgia"
+    ]
+   },
+   "pres": 6
+  },
+  {
+   "date": "1833-02-16",
+   "title": "Does the Bill of Rights bind the states?",
+   "seq": "6921.0 6922.0 6923.0",
+   "links": {
+    "landmarks": [
+     "Barron v. Baltimore"
+    ]
+   },
+   "pres": 7
+  },
+  {
+   "date": "1845",
+   "title": "James K. Polk of Mecklenburg",
+   "seq": "6924.0 6925.0",
+   "links": {
+    "presidents": [
+     11
+    ]
+   },
+   "pres": 10
+  },
+  {
+   "date": "1852",
+   "title": "William A. Graham",
+   "seq": "6926.0",
+   "links": {},
+   "pres": 13
+  },
+  {
+   "date": "1868-07-09",
+   "title": "The 14th Amendment",
+   "seq": "6927.0 6928.0",
+   "links": {
+    "landmarks": [
+     "14th Amendment",
+     "United States v. Cruikshank",
+     "Gitlow v. New York"
+    ]
+   },
+   "pres": 17
+  },
+  {
+   "date": "1981-01-20",
+   "title": "Reagan",
+   "seq": "6929.0 6930.0",
+   "links": {
+    "presidents": [
+     40
+    ],
+    "landmarks": [
+     "Economic Recovery Tax Act",
+     "Tax Reform Act of 1986"
+    ]
+   },
+   "pres": 40
+  },
+  {
+   "date": "2010-06-28",
+   "title": "Incorporation reaches the Second Amendment",
+   "seq": "6931.0 6932.0",
+   "links": {
+    "landmarks": [
+     "District of Columbia v. Heller",
+     "McDonald v. City of Chicago"
+    ]
+   },
+   "pres": 44
+  },
+  {
+   "date": "2022-06-23",
+   "title": "Bruen: history as the test",
+   "seq": "6933.0",
+   "links": {
+    "landmarks": [
+     "New York State Rifle & Pistol Assn. v. Bruen",
+     "United States v. Rahimi"
+    ]
+   },
+   "pres": 46
+  }
+ ],
+ "about_seq": "6934.0 6935.0"
+}
