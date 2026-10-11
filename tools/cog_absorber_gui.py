@@ -14,15 +14,16 @@ from __future__ import annotations
 import json, os, re, subprocess, sys, threading, webbrowser
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
                              QInputDialog, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
-                             QProgressBar, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget)
+                             QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cog_absorber as A        # noqa: E402
+import library_desk as D        # noqa: E402
 
 SETTINGS = HERE / "cog_absorber_gui.json"
 LOG = HERE / "cog_absorber_log.txt"
@@ -78,6 +79,13 @@ QLabel#cap { color: #8b929a; font-size: 8pt; }
 QLabel#title { font-size: 14pt; font-weight: 600; }
 QLabel#sub { color: #8b929a; font-size: 9pt; }
 QCheckBox::indicator { width: 15px; height: 15px; }
+QTabWidget::pane { border: 1px solid #252a33; border-radius: 6px; background: #161a22; top: -1px; }
+QTabBar::tab { background: #11141a; border: 1px solid #252a33; padding: 6px 14px; border-top-left-radius: 6px; border-top-right-radius: 6px; color: #8b929a; }
+QTabBar::tab:selected { background: #161a22; color: #e6e8ec; border-bottom-color: #161a22; }
+QTextBrowser { background: #0f1218; border: 1px solid #252a33; border-radius: 5px; padding: 6px; }
+QFrame#card { background: #1d2430; border: 1px solid #c9a227; border-radius: 8px; }
+QPushButton#chip { padding: 3px 9px; font-size: 9pt; border-radius: 11px; color: #9fb6d6; }
+QPushButton#run { background: #c9a227; color: #0c0e12; font-weight: 700; border: none; }
 """
 
 
@@ -195,6 +203,44 @@ class Worker(QObject):
             self.done.emit({"error": f"{type(e).__name__}: {e}"})
 
 
+class Invoker(QObject):
+    """Runs a function on the window's thread and waits for the answer (desk tools touch the window)."""
+    sig = pyqtSignal(object, object)
+
+    def __init__(self):
+        super().__init__()
+        self.sig.connect(self._run, Qt.ConnectionType.BlockingQueuedConnection)
+
+    @pyqtSlot(object, object)
+    def _run(self, fn, box):
+        try:
+            box["v"] = fn()
+        except Exception as e:      # noqa: BLE001
+            box["v"] = f"failed: {e}"
+
+    def __call__(self, fn):
+        if QThread.currentThread() is self.thread():
+            return fn()
+        box: dict = {}
+        self.sig.emit(fn, box)
+        return box.get("v")
+
+
+class DeskWorker(QObject):
+    step = pyqtSignal(str)
+    answer = pyqtSignal(str)
+
+    def __init__(self, desk, text):
+        super().__init__()
+        self.desk, self.text = desk, text
+
+    def run(self):
+        try:
+            self.answer.emit(self.desk.ask(self.text, on_step=self.step.emit))
+        except Exception as e:      # noqa: BLE001
+            self.answer.emit(f"The desk hit an error: {type(e).__name__}: {e}")
+
+
 class StatusWorker(QObject):
     done = pyqtSignal(dict, str)
 
@@ -273,7 +319,9 @@ class Window(QMainWindow):
         sg = QGroupBox("LIBRARY SECTIONS — groups, each with its own storage")
         sgv = QVBoxLayout(sg)
         self.seclist = QListWidget()
-        self.seclist.setMaximumHeight(92)
+        self.seclist.setMaximumHeight(104)
+        self.seclist.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.seclist.setWordWrap(True)
         sgv.addWidget(self.seclist)
         sb2 = QHBoxLayout()
         nb = QPushButton("New section…")
@@ -343,10 +391,13 @@ class Window(QMainWindow):
         self.bar.setFormat("ready")
         self.bar.setValue(0)
         rv.addWidget(self.bar)
+        self.tabs = QTabWidget()
         self.out = QPlainTextEdit(readOnly=True)
         self.out.setFont(QFont("Consolas", 9))
         self.out.setMaximumBlockCount(5000)
-        rv.addWidget(self.out, 1)
+        self.tabs.addTab(self.out, "Run log")
+        self.tabs.addTab(self._build_desk(), "Library Desk")
+        rv.addWidget(self.tabs, 1)
 
         sch = QGroupBox("SCHEDULES — everything runs only when you ask")
         sv = QVBoxLayout(sch)
@@ -424,6 +475,180 @@ class Window(QMainWindow):
         self.s.update(sources=self._sources(), items=self.items.value(), pages=self.pages.value(), books=self.books.isChecked(),
                       rights=self.rights.isChecked(), dry=self.dry.isChecked())
         save_settings(self.s)
+
+    # ------------------------------------------------------------------ library desk
+    def _build_desk(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(8, 8, 8, 8)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("Model"))
+        self.model = QComboBox()
+        top.addWidget(self.model, 1)
+        rb = QPushButton("Reload models")
+        rb.clicked.connect(self._load_models)
+        cb = QPushButton("Clear")
+        cb.clicked.connect(self._desk_clear)
+        top.addWidget(rb)
+        top.addWidget(cb)
+        v.addLayout(top)
+        self.chat = QTextBrowser()
+        self.chat.setOpenExternalLinks(True)
+        v.addWidget(self.chat, 1)
+        self.card = QFrame(objectName="card")
+        cl = QHBoxLayout(self.card)
+        self.card_text = QLabel("")
+        self.card_text.setWordWrap(True)
+        runb = QPushButton("Run it", objectName="run")
+        runb.clicked.connect(self._run_plan)
+        nob = QPushButton("Dismiss")
+        nob.clicked.connect(lambda: (self.card.hide(), setattr(self, "plan", None)))
+        cl.addWidget(self.card_text, 1)
+        cl.addWidget(runb)
+        cl.addWidget(nob)
+        self.card.hide()
+        v.addWidget(self.card)
+        chips = QHBoxLayout()
+        for t in ("What's in the library?", "Find Lex Rex on loc.gov", "Set up a Founders' Papers section",
+                  "Look up meaning 1000", "Why did the last run skip items?"):
+            c = QPushButton(t, objectName="chip")
+            c.clicked.connect(lambda _=False, t=t: self._desk_send(t))
+            chips.addWidget(c)
+        chips.addStretch(1)
+        v.addLayout(chips)
+        row = QHBoxLayout()
+        self.ask = QLineEdit(placeholderText="Ask the desk — find, set up, look up, read back, prepare a run…")
+        self.ask.returnPressed.connect(lambda: self._desk_send(self.ask.text()))
+        self.sendb = QPushButton("Send")
+        self.sendb.clicked.connect(lambda: self._desk_send(self.ask.text()))
+        self.dstop = QPushButton("Stop", enabled=False)
+        self.dstop.clicked.connect(lambda: self.desk.stop.set())
+        row.addWidget(self.ask, 1)
+        row.addWidget(self.sendb)
+        row.addWidget(self.dstop)
+        v.addLayout(row)
+        self.plan = None
+        self.invoke = Invoker()
+        self.desk = D.Desk(D.Reader(A.GitHubStore(self.s["repo"], self.s["branch"])), hooks={
+            "sources": lambda: self.invoke(lambda: [{k: x[k] for k in ("kind", "value", "section", "on")} for x in self._sources()]),
+            "add_source": lambda k, val, sec: self.invoke(lambda: self._desk_add_source(k, val, sec)),
+            "new_section": lambda t, st: self.invoke(lambda: self._desk_new_section(t, st)),
+            "propose": lambda plan: self.invoke(lambda: self._desk_propose(plan)),
+            "log_tail": lambda n: self.invoke(lambda: "\n".join(self.out.toPlainText().splitlines()[-n:]) or "(log is empty)"),
+        })
+        self._load_models()
+        self._bubble("desk", "Library Desk ready. I can check the library, find material on loc.gov, set up sections and "
+                     "sources, look up any address, read documents back, and prepare a run for you to approve.")
+        return w
+
+    def _load_models(self):
+        self.model.clear()
+        ms = D.Desk.models()
+        for m in ms:
+            self.model.addItem(m, m)
+        self.model.addItem("No model — quick answers only (status · 1042 · 1042.3 · log)", "")
+        if not ms:
+            self.say("Library Desk: Ollama is not answering on this PC, so only quick answers work. Start it with: ollama serve")
+
+    def _desk_clear(self):
+        self.chat.clear()
+        self.desk.history.clear()
+
+    def _bubble(self, who: str, text: str):
+        import html as _h
+        t = _h.escape(text).replace("\n", "<br>")
+        if who == "you":
+            self.chat.append(f'<p style="margin:8px 0 2px 0"><span style="color:#6ea8fe;font-weight:600">You</span><br>{t}</p>')
+        elif who == "step":
+            self.chat.append(f'<p style="margin:0;color:#6f7782;font-family:Consolas,monospace;font-size:8.5pt">{t}</p>')
+        else:
+            self.chat.append(f'<p style="margin:8px 0 2px 0"><span style="color:#7dcea0;font-weight:600">Desk</span><br>{t}</p>')
+
+    def _desk_send(self, text: str):
+        text = (text or "").strip()
+        if not text or not self.sendb.isEnabled():
+            return
+        self.ask.clear()
+        self.tabs.setCurrentIndex(1)
+        self._bubble("you", text)
+        self.desk.model = self.model.currentData() or ""
+        self.desk.stop.clear()
+        self.sendb.setEnabled(False)
+        self.dstop.setEnabled(True)
+        self._dt = QThread()
+        self._dw = DeskWorker(self.desk, text)
+        self._dw.moveToThread(self._dt)
+        self._dt.started.connect(self._dw.run)
+        self._dw.step.connect(lambda s: self._bubble("step", s))
+        self._dw.answer.connect(self._desk_answer)
+        self._dw.answer.connect(self._dt.quit)
+        self._dt.start()
+
+    def _desk_answer(self, text: str):
+        self._bubble("desk", text)
+        self.sendb.setEnabled(True)
+        self.dstop.setEnabled(False)
+
+    def _sec_id(self, name: str) -> str | None:
+        n = (name or "").strip().lower()
+        for k, v in self.s["sections"].items():
+            if n in (k, v["title"].lower()):
+                return k
+        return None
+
+    def _desk_add_source(self, kind: str, value: str, section: str) -> str:
+        sid = self._sec_id(section)
+        if not sid:
+            return f"no section called {section!r}; sections are: " + ", ".join(v["title"] for v in self.s["sections"].values())
+        for x in self._sources():
+            if x["value"].lower() == value.lower():
+                return f"{value} is already a source (section {x.get('section')})"
+        src = dict(kind=kind, value=value, label=("Collection · " if kind == "collection" else "Search · ") + value, section=sid, on=False)
+        self._add_item(src)
+        self._save()
+        self.say(f"Desk added source: {value} → {self.s['sections'][sid]['title']}")
+        return f"added {kind} {value!r} to section {self.s['sections'][sid]['title']} (not ticked; a proposed run ticks what it needs)"
+
+    def _desk_new_section(self, title: str, store: str) -> str:
+        store = (store or "core").strip()
+        if store != "core" and not re.fullmatch(r"[\w.-]+/[\w.-]+", store):
+            return "store must be core or owner/repo"
+        sid = re.sub(r"[^a-z0-9-]+", "-", title.lower()).strip("-")
+        if sid in self.s["sections"]:
+            return f"section {title} already exists"
+        self.s["sections"][sid] = {"title": title.strip(), "store": store}
+        self._fill_secpick()
+        self._fill_seclist(getattr(self, "_live_sections", {}))
+        self._save()
+        self.say(f"Desk created section: {title} → {store}")
+        return f"created section {title!r} (id {sid}) stored in {store}" + ("" if store == "core" else " — that repo must exist on GitHub")
+
+    def _desk_propose(self, plan: dict) -> str:
+        have = {x["value"].lower() for x in self._sources()}
+        missing = [x for x in plan["sources"] if x.lower() not in have]
+        if missing:
+            return "not sources in the window yet: " + ", ".join(missing) + " — add them first"
+        self.plan = plan
+        self.card_text.setText(f"<b>Proposed run</b> — {plan['documents']} documents from: {', '.join(plan['sources'])}"
+                               + ("  · <i>dry run</i>" if plan["dry_run"] else "  · pushes to GitHub"))
+        self.card.show()
+        return "proposed — Chad has to press Run it before anything happens"
+
+    def _run_plan(self):
+        p = self.plan
+        if not p:
+            return
+        want = {x.lower() for x in p["sources"]}
+        for i in range(self.list.count()):
+            it = self.list.item(i)
+            d = it.data(Qt.ItemDataRole.UserRole)
+            it.setCheckState(Qt.CheckState.Checked if d["value"].lower() in want else Qt.CheckState.Unchecked)
+        self.items.setValue(p["documents"])
+        self.dry.setChecked(p["dry_run"])
+        self.card.hide()
+        self.plan = None
+        self.tabs.setCurrentIndex(0)
+        self.start()
 
     # sections
     def _fill_secpick(self):
@@ -535,6 +760,7 @@ class Window(QMainWindow):
             self.say("Stopping after the current document — everything so far gets pushed…")
 
     def finished(self, r: dict):
+        self.desk.reader.refresh()
         self.go.setEnabled(True)
         self.stopb.setEnabled(False)
         if r.get("error"):
@@ -600,6 +826,7 @@ class Window(QMainWindow):
             self.say(f"Not found: {bat}")
 
     def closeEvent(self, e):
+        self.desk.stop.set()
         self._save()
         if self.worker and self.thread and self.thread.isRunning():
             self.worker.stop.set()
