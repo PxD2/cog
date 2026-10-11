@@ -32,13 +32,35 @@ https://pxd2.github.io/cog/
 | 100–104 | Physics core |
 | 200–204 | Philosophy core |
 | 300+ | Open |
+| 1000+ | Absorbed from the Library of Congress (assigned by the absorber, in order) |
 
 ## Structure
 
 ```
-books/     dual-number packs (JSON)
-plates/    PMOC-ready inspectable twins
-index.html walkable digital library
+books/              dual-number packs (JSON)
+  loc-m-NNNN.json   absorbed meaning packs  [meaning-id, keys, [first-variant], [variants]]
+  loc-d-NNNN.json   absorbed documents as address lines: "1000.0 1007.2 | 1012.0"  (| = paragraph)
+  catalog.json      every book + meaning-id ranges (the site reads this)
+loc/state.json      next free meaning-id, open files, where each loc.gov source left off
+loc/registry/       lookup segments: meaning hash -> id, sentence hash -> address, item -> doc pack
+plates/             PMOC-ready inspectable twins
+tools/              cog_absorber.py (engine) + cog_absorber_gui.py (window)
+index.html          walkable digital library (Library of Congress room reads the absorbed packs)
+```
+
+## Absorber (Library of Congress -> COG, on request only)
+
+The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.
+
+`tools/cog_absorber.py` pulls loc.gov items into memory, splits them into sentences, gives each new meaning the next free
+number (from 1000) and each new exact wording the next variant index, and pushes only the delta here with the Git Data API.
+No clone and no local library. Files are rewritten only while they are the open one (< 1 MB); closed files never change.
+A rights gate holds back anything after 1930 without an open-rights statement, because this repo is public.
+
+```
+python tools/cog_absorber.py --query "Samuel Rutherford" --books --items 10
+python tools/cog_absorber.py --collection century-of-lawmaking --items 25
+python tools/cog_absorber.py --status
 ```
 
 ## Rules

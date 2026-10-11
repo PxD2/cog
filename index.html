@@ -41,6 +41,19 @@ aside h2{font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:va
 .fast{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.8rem}
 .fast a{font-size:.76rem;color:var(--accent);text-decoration:none;border:1px solid var(--line);padding:.22rem .5rem;border-radius:4px}
 .fast a:hover{border-color:var(--accent)}
+.doc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.1rem;margin-top:1rem;max-width:58rem}
+.doc p{margin:0 0 .9rem;line-height:1.7}
+.doc .s{cursor:help;border-radius:3px}
+.doc .s:hover{background:#1e2a3d}
+.doc .s.on{background:#22324a}
+.tip{font-family:ui-monospace,monospace;font-size:.78rem;color:var(--ok);margin:.3rem 0 .8rem}
+.go{display:flex;gap:.4rem;margin-top:.5rem}
+.go input{width:100%;background:#0f1218;border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:.3rem .45rem;font-family:ui-monospace,monospace}
+.go button,.more{background:#1e232c;border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:.3rem .6rem;cursor:pointer}
+.stats{display:flex;gap:1.6rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+.stats b{display:block;font-family:ui-monospace,monospace;font-size:1.3rem;color:var(--ok)}
+.stats span{font-size:.72rem;color:var(--muted)}
+.trust{font-size:.78rem;color:var(--muted);margin-top:.4rem}
 footer{padding:.9rem 1.4rem;border-top:1px solid var(--line);font-size:.72rem;color:var(--muted)}
 </style>
 </head>
@@ -55,6 +68,7 @@ footer{padding:.9rem 1.4rem;border-top:1px solid var(--line);font-size:.72rem;co
     <button data-go="english">English</button>
     <button data-go="physics">Physics</button>
     <button data-go="philosophy">Philosophy</button>
+    <button data-go="loc">Library of Congress</button>
   </nav>
 </header>
 <main>
@@ -64,7 +78,9 @@ footer{padding:.9rem 1.4rem;border-top:1px solid var(--line);font-size:.72rem;co
     <button class="room" data-go="english">English</button>
     <button class="room" data-go="physics">Physics</button>
     <button class="room" data-go="philosophy">Philosophy</button>
+    <button class="room" data-go="loc">Library of Congress</button>
     <h2 style="margin-top:1.3rem">Fast Transport</h2>
+    <div class="go"><input id="jump" placeholder="1042 or 1042.3"><button id="jumpb">Go</button></div>
     <div class="fast" id="fast-links"></div>
   </aside>
   <div class="section" id="view"></div>
@@ -78,13 +94,53 @@ const books = {
   physics: { title: "Physics", blurb: "Core physical meanings. Force, energy, gravity, relativity, quantum.", file: "books/cog-physics-v0.json" },
   philosophy: { title: "Philosophy", blurb: "Foundational meanings. Existence, knowledge, ethics, free will, truth.", file: "books/cog-philosophy-v0.json" }
 };
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const files = {};
+async function getFile(f) {
+  if (!files[f]) files[f] = fetch(f).then(r => { if (!r.ok) throw new Error(f); return r.json(); });
+  return files[f];
+}
 const cache = {};
 async function load(name) {
   if (cache[name]) return cache[name];
-  const res = await fetch(books[name].file);
-  const data = await res.json();
-  cache[name] = data;
-  return data;
+  cache[name] = await getFile(books[name].file);
+  return cache[name];
+}
+let catalog = null;
+async function getCatalog() {
+  if (catalog) return catalog;
+  try { catalog = await getFile("books/catalog.json"); } catch (e) { catalog = { books: [], totals: {} }; }
+  return catalog;
+}
+// every row for meaning m: [first-variant, variants[]], from whichever packs hold it
+async function rowsFor(m) {
+  const out = [];
+  for (const [name, b] of Object.entries(books)) {
+    const d = await load(name);
+    d.s.filter(r => r[0] === m).forEach(r => out.push({ start: r[2][0], vs: r[3], keys: r[1] }));
+  }
+  if (out.length) return out;
+  const cat = await getCatalog();
+  const packs = cat.books.filter(b => b.room === "loc" && b.kind === "meanings" &&
+    ((b.from != null && m >= b.from && m <= b.to) || (b.cont || []).includes(m)));
+  for (const b of packs) {
+    const d = await getFile(b.file);
+    d.s.filter(r => r[0] === m).forEach(r => out.push({ start: r[2][0], vs: r[3], keys: r[1] }));
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+async function variant(m, v) {
+  for (const r of await rowsFor(m)) if (v >= r.start && v < r.start + r.vs.length) return r.vs[v - r.start];
+  return null;
+}
+async function showMeaning(m, hi) {
+  const rows = await rowsFor(m);
+  const view = document.getElementById("view");
+  if (!rows.length) { view.innerHTML = `<div class="hero"><h2>${m}</h2><p>No meaning with that number yet.</p></div>`; return; }
+  const keys = (rows.find(r => r.keys && r.keys.length) || {keys: ["~"]}).keys;
+  const list = rows.flatMap(r => r.vs.map((p, i) => `<li${r.start + i === hi ? ' style="color:var(--ok)"' : ""}><span class="idx">${r.start + i}</span><span>${esc(p)}</span></li>`)).join("");
+  view.innerHTML = `<div class="hero"><h2>${esc(keys.join(" · "))}</h2><p>Meaning ${m}: every exact sentence the library has seen that says this.</p></div>
+    <div class="detail open"><div class="addr">(${m}, N)</div><ul class="variants">${list}</ul></div>`;
 }
 function entrance() {
   document.getElementById("view").innerHTML = `
@@ -96,6 +152,7 @@ function entrance() {
       <div class="card" data-go="english"><div class="id">Hall</div><h3>English</h3><div class="keys">inquiry · status · sitrep</div></div>
       <div class="card" data-go="physics"><div class="id">Wing</div><h3>Physics</h3><div class="keys">force · energy · gravity · relativity · quantum</div></div>
       <div class="card" data-go="philosophy"><div class="id">Wing</div><h3>Philosophy</h3><div class="keys">existence · knowledge · ethics · free will · truth</div></div>
+      <div class="card" data-go="loc"><div class="id">1000+</div><h3>Library of Congress</h3><div class="keys">absorbed texts · law · the Reformers</div></div>
     </div>`;
   bindCards();
 }
@@ -128,20 +185,84 @@ function expand(room, id) {
   const row = data.s.find(r => r[0] === id);
   if (!row) return;
   const [, keys, , phrases] = row;
-  const list = phrases.map((p,i) => `<li><span class="idx">${i}</span><span>${p}</span></li>`).join("");
+  const list = phrases.map((p,i) => `<li><span class="idx">${i}</span><span>${esc(p)}</span></li>`).join("");
   const d = document.getElementById("detail");
   d.className = "detail open";
   d.innerHTML = `<h3>${keys[0].replace(/_/g," ")}</h3><div class="addr">(${id}, N)</div><ul class="variants">${list}</ul>`;
   d.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
+// ---- Library of Congress room: absorbed documents, read back from their addresses
+let docPacks = [], docShown = 0, docList = [];
+async function showLoc() {
+  const cat = await getCatalog();
+  const t = cat.totals || {};
+  docPacks = cat.books.filter(b => b.room === "loc" && b.kind === "docs").map(b => b.file).reverse();
+  docShown = 0; docList = [];
+  document.getElementById("fast-links").innerHTML = "";
+  document.getElementById("view").innerHTML = `
+    <div class="hero"><h2>Library of Congress</h2>
+      <p>Texts absorbed from loc.gov. Each document is stored only as a line of (meaning, variant) addresses and rebuilt here from the meaning packs. Absorbed meanings start at 1000.</p>
+      <div class="trust">${esc(cat.trust || "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.")}</div></div>
+    <div class="stats">
+      <div><b>${(t.docs||0).toLocaleString()}</b><span>documents</span></div>
+      <div><b>${(t.meanings||0).toLocaleString()}</b><span>meanings</span></div>
+      <div><b>${(t.variants||0).toLocaleString()}</b><span>exact sentences</span></div>
+      <div><b>${(t.sentences||0).toLocaleString()}</b><span>sentences read</span></div>
+      <div><b>${cat.next_meaning || 1000}</b><span>next free meaning-id</span></div>
+    </div>
+    <div class="grid" id="docs"></div>
+    <div style="margin-top:1rem"><button class="more" id="more" style="display:none">More documents</button></div>
+    <div id="reader"></div>`;
+  document.getElementById("more").onclick = moreDocs;
+  if (!docPacks.length) { document.getElementById("docs").innerHTML = `<p style="color:var(--muted)">Nothing absorbed yet — press ABSORB NOW in the COG Absorber on base1.</p>`; return; }
+  moreDocs();
+}
+async function moreDocs() {
+  if (docShown >= docPacks.length) return;
+  const d = await getFile(docPacks[docShown++]);
+  const grid = document.getElementById("docs");
+  [...d.docs].reverse().forEach(doc => {
+    const i = docList.push(doc) - 1;
+    grid.insertAdjacentHTML("beforeend", `<div class="card" data-doc="${i}"><div class="id">${esc(doc.date || "")}${doc.part ? " · part " + doc.part : ""}</div>
+      <h3>${esc(doc.title || doc.id)}</h3><div class="keys">${(doc.n||0).toLocaleString()} sentences · ${esc((doc.source||"").replace(/^q:/,"search: ").replace(" |books",""))}</div></div>`);
+  });
+  grid.querySelectorAll(".card[data-doc]").forEach(c => c.onclick = () => readDoc(docList[+c.dataset.doc]));
+  document.getElementById("more").style.display = docShown < docPacks.length ? "" : "none";
+}
+async function readDoc(doc) {
+  const r = document.getElementById("reader");
+  r.innerHTML = `<div class="doc"><h3>${esc(doc.title)}</h3><div class="tip">rebuilding from addresses…</div></div>`;
+  r.scrollIntoView({behavior:"smooth"});
+  const toks = doc.seq.split(" ");
+  const paras = [[]];
+  for (const t of toks) {
+    if (t === "|") { paras.push([]); continue; }
+    const [m, v] = t.split(".").map(Number);
+    paras[paras.length - 1].push({ t, text: await variant(m, v) });
+  }
+  const html = paras.filter(p => p.length).map(p => "<p>" + p.map(x => `<span class="s" data-a="${x.t}" title="${x.t}">${esc(x.text ?? "[" + x.t + "]")}</span>`).join(" ") + "</p>").join("");
+  r.innerHTML = `<div class="doc"><h3>${esc(doc.title)}</h3>
+    <div class="tip">${esc(doc.date || "")} · <a href="${esc(doc.url)}" target="_blank" rel="noopener" style="color:var(--accent)">original at loc.gov</a> · hover a sentence for its address, click it to open its meaning</div>${html}</div>`;
+  r.querySelectorAll(".s").forEach(s => s.onclick = () => { const [m, v] = s.dataset.a.split(".").map(Number); showMeaning(m, v); });
+}
 function go(name) {
   document.querySelectorAll("nav button, .room").forEach(b => b.classList.toggle("active", b.dataset.go === name));
   if (name === "entrance") entrance();
+  else if (name === "loc") showLoc();
   else showRoom(name);
 }
 function bindCards() {
   document.querySelectorAll(".card[data-go]").forEach(c => { c.onclick = () => go(c.dataset.go); });
 }
+function jump() {
+  const v = document.getElementById("jump").value.trim();
+  const m = v.match(/^(\d+)(?:\.(\d+))?$/);
+  if (!m) return;
+  document.querySelectorAll("nav button, .room").forEach(b => b.classList.remove("active"));
+  showMeaning(+m[1], m[2] != null ? +m[2] : -1);
+}
+document.getElementById("jumpb").onclick = jump;
+document.getElementById("jump").onkeydown = e => { if (e.key === "Enter") jump(); };
 document.querySelectorAll("nav button, .room").forEach(b => { b.onclick = () => go(b.dataset.go); });
 entrance();
 </script>
