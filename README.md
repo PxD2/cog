@@ -18,6 +18,16 @@ Nothing else travels. The full sentence is recovered only after the shared book 
 - Growth is pure append: next free meaning-id or next variant-index.
 - The same packs power a walkable digital library and future VR rooms.
 
+## Alexandria — the reader (PC + VR)
+
+https://pxd2.github.io/cog/alexandria/
+
+A modern encyclopedia built only from these packs: articles at two reading levels (K–5 / 6–12), read-aloud, quizzes,
+timeline, atlas, primary sources, instant search over every sentence, and a tutor that answers only from the library
+(each quote shows its address). "Enter the Hall" opens a 3D Great Hall; in a VR headset browser it becomes WebXR.
+COG numbers stay hidden until you press `#`. Articles: `sections/encyclopedia/` (published by `tools/publish_articles.py`).
+Optional: the tutor can use base1's Ollama (start it with `OLLAMA_ORIGINS=https://pxd2.github.io`).
+
 ## Live library
 
 https://pxd2.github.io/cog/
@@ -38,7 +48,7 @@ https://pxd2.github.io/cog/
 
 ```
 books/              dual-number packs (JSON)
-  loc-m-NNNN.json   absorbed meaning packs  [meaning-id, keys, [first-variant], [variants]]
+  core-m-NNNN.json  shared meaning packs (absorbed texts + articles)  [meaning-id, keys, [first-variant], [variants]]
   catalog.json      every book + meaning-id ranges (the site reads this)
 sections/<name>/    library sections: docs-NNNN.json = documents as address lines "1000.0 1007.2 | 1012.0" (| = paragraph)
 loc/state.json      next free meaning-id, open files, sections (title + where stored), where each source left off

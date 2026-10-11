@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cog_absorber as A        # noqa: E402
 import library_desk as D        # noqa: E402
+import publish_articles as P     # noqa: E402
 
 SETTINGS = HERE / "cog_absorber_gui.json"
 LOG = HERE / "cog_absorber_log.txt"
@@ -241,6 +242,25 @@ class DeskWorker(QObject):
             self.answer.emit(f"The desk hit an error: {type(e).__name__}: {e}")
 
 
+class PublishWorker(QObject):
+    log = pyqtSignal(str)
+    done = pyqtSignal(dict)
+
+    def __init__(self, repo, branch):
+        super().__init__()
+        self.repo, self.branch = repo, branch
+
+    def run(self):
+        try:
+            store = A.GitHubStore(self.repo, self.branch)
+            if not store.token:
+                self.done.emit({"error": "No GitHub sign-in found."})
+                return
+            self.done.emit(P.publish(store, HERE / "content" / "articles", log=self.log.emit))
+        except Exception as e:      # noqa: BLE001
+            self.done.emit({"error": f"{type(e).__name__}: {e}"})
+
+
 class StatusWorker(QObject):
     done = pyqtSignal(dict, str)
 
@@ -377,7 +397,8 @@ class Window(QMainWindow):
         self.srcinfo.setWordWrap(True)
         lg.addWidget(self.srcinfo, 2, 0, 1, 5)
         btns = QHBoxLayout()
-        for text, fn in [("Refresh", self.refresh), ("Open the library site", lambda: webbrowser.open(SITE)),
+        for text, fn in [("Refresh", self.refresh), ("Open Alexandria", lambda: webbrowser.open(SITE + "alexandria/")),
+                         ("Publish articles", self.publish_articles),
                          ("Open repo on GitHub", lambda: webbrowser.open(f"https://github.com/{self.s['repo']}")),
                          ("Open log file", self.open_log)]:
             bb = QPushButton(text)
@@ -649,6 +670,19 @@ class Window(QMainWindow):
         self.plan = None
         self.tabs.setCurrentIndex(0)
         self.start()
+
+    def publish_articles(self):
+        self.tabs.setCurrentIndex(0)
+        self.say("")
+        self.say("=== Publish encyclopedia articles (content/articles) → section Encyclopedia")
+        self._pt = QThread()
+        self._pw = PublishWorker(self.s["repo"], self.s["branch"])
+        self._pw.moveToThread(self._pt)
+        self._pt.started.connect(self._pw.run)
+        self._pw.log.connect(self.say)
+        self._pw.done.connect(lambda r: (self.say("ERROR: " + r["error"]) if r.get("error") else None, self.refresh(), self.desk.reader.refresh()))
+        self._pw.done.connect(self._pt.quit)
+        self._pt.start()
 
     # sections
     def _fill_secpick(self):

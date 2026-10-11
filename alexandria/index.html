@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alexandria — the People's Trust</title>
+<meta name="description" content="A modern encyclopedia built entirely from COG numbered meanings on GitHub, with a tutor that answers only from its sources. On PC and in VR.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2311151c'/%3E%3Cpath d='M14 50h36M18 46V26M27 46V26M37 46V26M46 46V26M12 24l20-12 20 12z' stroke='%23d4ad3b' stroke-width='4' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 50h36M18 46V26M27 46V26M37 46V26M46 46V26M12 24l20-12 20 12z"/></svg>
+    <span><b>Alexandria</b><small>the People's Trust</small></span>
+  </a>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search everything — articles, every sentence, primary sources" autocomplete="off" aria-label="Search">
+    <div id="sugg" class="sugg" hidden></div>
+  </div>
+  <nav class="nav">
+    <a href="#/explore" data-nav="explore">Explore</a>
+    <a href="#/timeline" data-nav="timeline">Timeline</a>
+    <a href="#/atlas" data-nav="atlas">Atlas</a>
+    <a href="#/sources" data-nav="sources">Sources</a>
+    <a href="#/quiz" data-nav="quiz">Quiz</a>
+  </nav>
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Reading level">
+      <button data-level="young" title="Young readers (K–5)">K–5</button>
+      <button data-level="deeper" title="Explore deeper (6–12)">6–12</button>
+    </div>
+    <button class="icon" id="nums" title="Show COG numbers" aria-pressed="false">#</button>
+    <button class="icon" id="theme" title="Light / dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2v16a8 8 0 0 1 0-16z"/></svg></button>
+    <button class="pill" id="tutorBtn">Tutor</button>
+    <button class="pill gold" id="vrBtn" title="Walk the library in VR (or in 3D on this screen)">Enter the Hall</button>
+  </div>
+</header>
+
+<main id="view" tabindex="-1"></main>
+
+<aside id="tutor" class="tutor" hidden aria-label="Tutor">
+  <div class="tutor-head">
+    <div><b>Tutor</b><small id="tutorMode">answers only from the library</small></div>
+    <button class="icon" id="tutorSet" title="Settings">⚙</button>
+    <button class="icon" id="tutorClose" title="Close">✕</button>
+  </div>
+  <div id="tutorCfg" class="tutor-cfg" hidden>
+    <label><input type="checkbox" id="useModel"> Let base1's local model write the answers (still only from library passages)</label>
+    <div class="row"><input id="ollamaUrl" placeholder="http://localhost:11434"><select id="ollamaModel"></select><button id="ollamaTest">Connect</button></div>
+    <p class="fine">On base1, start Ollama with <code>OLLAMA_ORIGINS=https://pxd2.github.io</code> so this page may talk to it. Without it the tutor still answers from the library.</p>
+  </div>
+  <div id="chat" class="chat"></div>
+  <div class="chips" id="chips"></div>
+  <form id="ask" class="ask"><input id="askIn" placeholder="Ask anything about the library…" autocomplete="off"><button>Ask</button></form>
+</aside>
+
+<div id="hall" class="hall" hidden>
+  <div class="hall-bar"><b>The Great Hall</b><span id="hallHint">Drag to look · click a book to read · click the floor to walk</span><button class="pill" id="hallExit">Leave the Hall</button></div>
+</div>
+
+<footer class="foot">
+  <span>Every word here is stored as a COG address on GitHub and rebuilt in your browser.</span>
+  <span id="trust"></span>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ Nothing is kept on this PC: texts are fetched into memory, numbered, committed, 
                                                                                   ("|" = paragraph break)
 
 What it writes in the repo (all append-only; a file is only ever rewritten while it is still the open one, < 1 MB):
-    books/loc-m-0001.json   meaning packs, same format as the hand-made books:  [meaning-id, keys, [first-variant], [variants]]
+    books/core-m-0001.json   meaning packs, same format as the hand-made books:  [meaning-id, keys, [first-variant], [variants]]
                             (a later row for an existing meaning continues its variants from [first-variant])
     books/loc-d-0001.json   document packs: title, date, link, and the document as an address sequence
     loc/registry/r-0001.json  lookup segments (hash -> meaning, hash -> address, item -> doc pack)
@@ -46,6 +46,7 @@ FIRST_ABSORBED = 1000
 PACK_LIMIT = 900_000           # roll to a new file before 1 MB
 COMMIT_EVERY = 300_000         # push once this many new bytes are waiting (and always at the end / on STOP)
 MIN_TEXT = 200
+YEAR1 = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
 PARA = re.compile(r"\n[ \t]*\n\s*$")
 TRUST = "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity."
 UA = "PXD2-COG-Absorber/1.0"
@@ -185,6 +186,35 @@ class GitHubStore:
         raise RuntimeError("could not push: the branch kept moving")
 
 
+class LocalStore:
+    """Same interface, on a folder (a git working tree). commit() writes the files; push with git yourself."""
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.tree: dict[str, str] = {}
+        self.head = "local"
+        self.branch = BRANCH
+
+    def whoami(self) -> str:
+        return "local"
+
+    def refresh(self) -> None:
+        self.tree = {p.relative_to(self.root).as_posix(): "x" for p in self.root.rglob("*")
+                     if p.is_file() and ".git" not in p.parts}
+
+    def get(self, path: str) -> bytes | None:
+        p = self.root / path
+        return p.read_bytes() if p.is_file() else None
+
+    def commit(self, files: dict[str, bytes], message: str) -> str:
+        for path, b in files.items():
+            p = self.root / path
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b)
+            self.tree[path] = "x"
+        return "local"
+
+
 class MemStore:
     """Same interface as GitHubStore, in memory (self-test and dry runs)."""
 
@@ -244,20 +274,23 @@ class Library:
         o = self.state["open"]
         self.mpack = self._load(self.mfile(o["m"])) or self._new_mpack(o["m"])
         self.dpacks: dict[str, dict] = {}            # section -> its open document pack (loaded when first used)
+        self.ipacks: dict[str, dict] = {}            # section -> its open finder index (always kept in core)
         self.rseg = self._load(self.rfile(o["r"])) or {"m": {}, "v": {}, "i": {}}
         self._rows = {r[0]: r for r in self.mpack["s"]}
         self._msize, self._rsize = len(dumps(self.mpack)), len(dumps(self.rseg))
         cat = self._load("books/catalog.json") or {}
         self.ranges = {b["file"]: {k: b.get(k) for k in ("from", "to", "cont")}
-                       for b in cat.get("books", []) if b.get("room") == "loc" and b.get("kind") == "meanings"}
+                       for b in cat.get("books", []) if b.get("room") == "core" and b.get("kind") == "meanings"}
         self.dirty: set[str] = set()
         self.pending = 0
 
     # file names
     @staticmethod
-    def mfile(n): return f"books/loc-m-{n:04d}.json"
+    def mfile(n): return f"books/core-m-{n:04d}.json"
     @staticmethod
     def dfile(sec, n): return f"sections/{sec}/docs-{n:04d}.json"
+    @staticmethod
+    def ifile(sec, n): return f"sections/{sec}/index-{n:04d}.json"
     @staticmethod
     def rfile(n): return f"loc/registry/r-{n:04d}.json"
 
@@ -266,7 +299,7 @@ class Library:
         return json.loads(b) if b else None
 
     def _new_mpack(self, n):
-        return {"name": f"loc-m-{n:04d}", "ver": 1, "w": 2, "crc": 0, "src": "loc.gov", "trust": TRUST, "s": []}
+        return {"name": f"core-m-{n:04d}", "ver": 1, "w": 2, "crc": 0, "src": "loc.gov", "trust": TRUST, "s": []}
 
     def _new_dpack(self, sec, n):
         return {"name": f"{sec}/docs-{n:04d}", "ver": 1, "kind": "docs", "section": sec, "src": "loc.gov", "trust": TRUST,
@@ -293,6 +326,21 @@ class Library:
             s.refresh()
             self.ext[repo] = s
         return self.ext[repo]
+
+    def _ipack(self, sec: str) -> dict:
+        if sec not in self.ipacks:
+            n = self.state["sections"][sec].setdefault("iopen", 1)
+            self.ipacks[sec] = self._load(self.ifile(sec, n)) or {"name": f"{sec}/index-{n:04d}", "ver": 1, "section": sec,
+                "note": "finder index: t=title y=year d=date s=subject p=place k=kind f=docs file no. i=position", "e": []}
+        return self.ipacks[sec]
+
+    def _index(self, sec: str, e: dict) -> None:
+        ip = self._ipack(sec)
+        if len(dumps(ip)) + len(dumps(e)) > PACK_LIMIT and ip["e"]:
+            self._roll("i:" + sec)
+            ip = self._ipack(sec)
+        ip["e"].append({k: v for k, v in e.items() if v not in (None, "", [], {})})
+        self.dirty.add("i:" + sec)
 
     def _dpack(self, sec: str) -> dict:
         if sec not in self.dpacks:
@@ -358,11 +406,7 @@ class Library:
         self.items[h] = self.rseg["i"][h] = where
         self.dirty.add("r")
 
-    def add_doc(self, item_id: str, meta: dict, text: str, sec: str = "general") -> int:
-        if sec not in self.state["sections"]:
-            sec_key = sec
-            self.section(sec_key)
-        sst = self.state["sections"][sec]
+    def encode(self, text: str) -> tuple[list[str], int]:
         seq, n = [], 0
         for seg in segments(text):
             sent = norm_sentence(seg)
@@ -373,23 +417,64 @@ class Library:
                 seq.append("|")
         while seq and seq[-1] == "|":
             seq.pop()
+        return seq, n
+
+    def _place(self, sec: str, entry: dict) -> tuple[int, int]:
+        dp = self._dpack(sec)
+        if len(dumps(dp)) + len(dumps(entry)) > PACK_LIMIT and dp["docs"]:
+            self._roll("d:" + sec)
+            dp = self._dpack(sec)
+        dp["docs"].append(entry)
+        self.dirty.add("d:" + sec)
+        return self.state["sections"][sec]["open"], len(dp["docs"]) - 1
+
+    def add_article(self, key: str, sec: str, art: dict) -> int:
+        """An encyclopedia article: several reading levels, each stored as an address line, plus quiz and facts."""
+        if sec not in self.state["sections"]:
+            self.section(sec)
+        sst = self.state["sections"][sec]
+        levels, n = {}, 0
+        for lvl, text in (art.get("texts") or {}).items():
+            if text:
+                seq, k = self.encode(text)
+                levels[lvl] = " ".join(seq)
+                n += k
+        entry = {"id": art["id"], "kind": "article", "title": art["title"], "subject": art.get("subject"), "year": art.get("year"),
+                 "place": art.get("place"), "related": art.get("related"), "summary": art.get("summary"), "quiz": art.get("quiz"),
+                 "levels": levels, "n": n, "at": now()}
+        f, i = self._place(sec, entry)
+        self._index(sec, {"id": art["id"], "k": "article", "t": art["title"], "s": art.get("subject"), "y": art.get("year"),
+                          "p": art.get("place"), "sum": (art.get("summary") or "")[:240], "rel": art.get("related"), "f": f, "i": i})
+        self.pending += sum(len(x) for x in levels.values()) + 400
+        self.mark(key, f"{sec}:{self.dfile(sec, f)}")
+        self.state["totals"]["docs"] += 1
+        self.state["totals"]["sentences"] += n
+        sst["docs"] += 1
+        sst["sentences"] += n
+        self._maybe_roll()
+        return n
+
+    def add_doc(self, item_id: str, meta: dict, text: str, sec: str = "general") -> int:
+        if sec not in self.state["sections"]:
+            self.section(sec)
+        sst = self.state["sections"][sec]
+        seq, n = self.encode(text)
         parts, cur, size = [], [], 0                    # a huge document spans entries, never splitting an address
         for tok in seq:
             if size + len(tok) + 1 > 600_000 and cur:
                 parts.append(" ".join(cur)); cur, size = [], 0
             cur.append(tok); size += len(tok) + 1
         parts.append(" ".join(cur))
+        ym = YEAR1.search(meta.get("date", "") or "")
         for i, p in enumerate(parts):
             entry = dict(meta, id=item_id, n=n, chars=len(text), seq=p, at=now())
             if len(parts) > 1:
                 entry["part"] = f"{i + 1}/{len(parts)}"
-            dp = self._dpack(sec)
-            if len(dumps(dp)) + len(p) > PACK_LIMIT and dp["docs"]:
-                self._roll("d:" + sec)
-                dp = self._dpack(sec)
-            dp["docs"].append(entry)
+            f, pos = self._place(sec, entry)
+            if i == 0:
+                self._index(sec, {"id": item_id, "k": "doc", "t": meta.get("title"), "y": int(ym.group(1)) if ym else None,
+                                  "d": meta.get("date"), "f": f, "i": pos, "n": n, "parts": len(parts) if len(parts) > 1 else None})
             self.pending += len(p) + 200
-            self.dirty.add("d:" + sec)
         self.mark(item_id, f"{sec}:{self.dfile(sec, sst['open'])}")
         self.state["totals"]["docs"] += 1
         self.state["totals"]["sentences"] += n
@@ -412,13 +497,18 @@ class Library:
             self.state["sections"][sec]["open"] += 1
             n = self.state["sections"][sec]["open"]
             self.dpacks[sec] = self._new_dpack(sec, n)
+        elif kind.startswith("i:"):
+            sec = kind[2:]
+            self.state["sections"][sec]["iopen"] = self.state["sections"][sec].get("iopen", 1) + 1
+            n = self.state["sections"][sec]["iopen"]
+            self.ipacks.pop(sec, None)
         else:
             self.state["open"][kind] += 1
             n = self.state["open"][kind]
         if kind == "m":
             self.mpack, self._rows = self._new_mpack(n), {}
             self._msize = len(dumps(self.mpack))
-        elif kind.startswith("d:"):
+        elif kind.startswith(("d:", "i:")):
             pass
         else:
             self.rseg = {"m": {}, "v": {}, "i": {}}
@@ -449,6 +539,9 @@ class Library:
                 st = self.state["sections"][sec]
                 f = {self.dfile(sec, st["open"]): dumps(self.dpacks[sec])}
                 (core.update(f) if st["store"] == "core" else ext.setdefault(st["store"], {}).update(f))
+            if k.startswith("i:") and k[2:] in self.ipacks:
+                sec = k[2:]
+                core[self.ifile(sec, self.state["sections"][sec].get("iopen", 1))] = dumps(self.ipacks[sec])
         return core, ext
 
     def catalog(self, tree_paths) -> dict:
@@ -460,20 +553,21 @@ class Library:
             if not (p.startswith("books/") and p.endswith(".json")) or p == "books/catalog.json":
                 continue
             name = p[6:-5]
-            if name.startswith("loc-m-"):
-                books.append({"file": p, "kind": "meanings", "room": "loc"})
+            if name.startswith("core-m-"):
+                books.append({"file": p, "kind": "meanings", "room": "core"})
             else:
                 t, b = own.get(name, (name, ""))
                 books.append({"file": p, "kind": "meanings", "room": name, "title": t, "blurb": b})
         open_m = self.mfile(self.state["open"]["m"])
         for b in books:
-            if b["room"] == "loc" and b["kind"] == "meanings":
+            if b["room"] == "core" and b["kind"] == "meanings":
                 b.update(self._range(self.mpack) if b["file"] == open_m else self.ranges.get(b["file"], {}))
         sections = []
         for sec, st in self.state["sections"].items():
             base = "" if st["store"] == "core" else f"https://raw.githubusercontent.com/{st['store']}/{getattr(self.store, 'branch', BRANCH)}/"
             sections.append({"id": sec, "title": st["title"], "store": st["store"], "base": base, "docs": st["docs"],
-                             "sentences": st["sentences"], "files": [self.dfile(sec, i) for i in range(1, st["open"] + 1)]})
+                             "sentences": st["sentences"], "files": [self.dfile(sec, i) for i in range(1, st["open"] + 1)],
+                             "index": [self.ifile(sec, i) for i in range(1, st.get("iopen", 1) + 1)]})
         return {"name": "COG catalog", "updated": now(), "trust": TRUST, "next_meaning": self.state["next_meaning"],
                 "totals": self.state["totals"], "books": books, "sections": sections}
 
@@ -627,7 +721,7 @@ def decode(store, seq: str) -> str:
     """Rebuild a document from its addresses (for checking)."""
     rows: dict[int, list[tuple[int, list[str]]]] = {}
     for p in sorted(store.tree):
-        if p.startswith("books/loc-m-"):
+        if p.startswith("books/core-m-"):
             for r in json.loads(store.get(p))["s"]:
                 rows.setdefault(r[0], []).append((r[2][0], r[3]))
     out, para = [], []
@@ -687,14 +781,14 @@ def selftest() -> None:
     back = decode(store, seqA)
     assert back.startswith("Congress shall have power to lay and collect taxes. The power to lay and collect taxes, Congress shall have."), back[:80]
     assert "It is so ordered." in back
-    m = json.loads(store.files["books/loc-m-0001.json"])
+    m = json.loads(store.files["books/core-m-0001.json"])
     assert m["s"][0][:3] == [1000, ["congress", "power", "lay", "collect", "taxes"], [0]], m["s"][0]
     cat = json.loads(store.files["books/catalog.json"])
-    assert any(b["file"] == "books/loc-m-0001.json" and b["from"] == 1000 for b in cat["books"])
+    assert any(b["file"] == "books/core-m-0001.json" and b["from"] == 1000 for b in cat["books"])
     # second run: nothing new, addresses never change, the doc is not re-absorbed
     before = dict(store.files)
     r2 = Absorber(store, FakeFetcher(), log=logs.append).run(["q:test"], max_items=10)
-    assert r2["docs"] == 0 and store.files["books/loc-m-0001.json"] == before["books/loc-m-0001.json"]
+    assert r2["docs"] == 0 and store.files["books/core-m-0001.json"] == before["books/core-m-0001.json"]
     # a new wording of a known meaning in a later run continues the variant numbers (append-only)
     pages["https://www.loc.gov/search/?q=more&fo=json&c=25&sp=1"] = {"pagination": {}, "results": [{"id": "http://www.loc.gov/item/e/", "title": "E", "date": "1700"}]}
     texts["e"] = "Taxes: Congress shall have power to lay and collect them. " * 10 + "To lay and collect taxes, Congress shall have power."
@@ -714,7 +808,7 @@ def selftest() -> None:
         Absorber(store, FakeFetcher(), log=logs.append).run(["q:big"], max_items=5)
     finally:
         PACK_LIMIT = old
-    packs = [p for p in store.files if p.startswith("books/loc-m-")]
+    packs = [p for p in store.files if p.startswith("books/core-m-")]
     assert len(packs) > 3, packs
     f_seq = " ".join(x["seq"] for x in json.loads(store.files[max(p for p in store.files if p.startswith("sections/general/docs-"))])["docs"] if x["title"] == "F")
     assert decode(store, f_seq).startswith("Sentence number 0 about subject 0. Sentence number 1"), decode(store, f_seq)[:60]
@@ -730,11 +824,22 @@ def selftest() -> None:
          {"src": "q:ref", "section": "reformers", "title": "The Reformers", "store": "PxD2/cog-reformers"}], max_items=5)
     assert "sections/law/docs-0001.json" in store.files                      # core-hosted section
     assert "sections/reformers/docs-0001.json" in side["PxD2/cog-reformers"].files   # its own repo
-    assert not any(p.startswith("sections/reformers/") for p in store.files)
     h = json.loads(side["PxD2/cog-reformers"].files["sections/reformers/docs-0001.json"])["docs"][0]["seq"]
     g = json.loads(store.files["sections/law/docs-0001.json"])["docs"][0]["seq"]
     assert h.split()[0] == g.split()[0], (h[:20], g[:20])                    # "It is so ordered." = same address everywhere
     assert decode(store, h).startswith("It is so ordered. Lex rex")
+    assert not any(p.startswith("sections/reformers/docs") for p in store.files)       # documents in their own repo
+    assert "sections/reformers/index-0001.json" in store.files                          # the finder index stays in core
+    ix = json.loads(store.files["sections/law/index-0001.json"])["e"][0]
+    assert ix["t"] == "G" and ix["y"] == 1791 and ix["f"] == 1 and ix["i"] == 0, ix
+    # an article: levels + quiz, same global numbers
+    lib = Library(store, log=logs.append, store_for=factory)
+    lib.add_article("article:test@1", "encyclopedia", {"id": "article:test", "title": "Test", "subject": "Civics", "year": 1791,
+                    "texts": {"young": "It is so ordered. Kids text here.", "deeper": "It is so ordered. Older text here."},
+                    "quiz": [{"level": "young", "q": "?", "choices": ["a", "b"], "answer": 1}]})
+    lib.flush("article")
+    art = json.loads(store.files["sections/encyclopedia/docs-0001.json"])["docs"][0]
+    assert art["levels"]["young"].split()[0] == g.split()[0] and art["quiz"][0]["answer"] == 1
     cat = json.loads(store.files["books/catalog.json"])
     secs = {x["id"]: x for x in cat["sections"]}
     assert secs["reformers"]["base"].startswith("https://raw.githubusercontent.com/PxD2/cog-reformers/") and secs["law"]["base"] == ""

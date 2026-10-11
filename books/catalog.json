@@ -1,0 +1,59 @@
+{
+ "name": "COG catalog",
+ "updated": "2026-10-11T01:31:24+00:00",
+ "trust": "The Library of Congress is a taxpayer trust: held in trust for the people who paid for it, not a government organization or entity.",
+ "next_meaning": 1420,
+ "totals": {
+  "meanings": 420,
+  "variants": 420,
+  "docs": 36,
+  "sentences": 420
+ },
+ "books": [
+  {
+   "file": "books/cog-english-v0.json",
+   "kind": "meanings",
+   "room": "cog-english-v0",
+   "title": "English",
+   "blurb": "Inquiry into situation, status, activity."
+  },
+  {
+   "file": "books/cog-philosophy-v0.json",
+   "kind": "meanings",
+   "room": "cog-philosophy-v0",
+   "title": "Philosophy",
+   "blurb": "Foundational meanings."
+  },
+  {
+   "file": "books/cog-physics-v0.json",
+   "kind": "meanings",
+   "room": "cog-physics-v0",
+   "title": "Physics",
+   "blurb": "Core physical meanings."
+  },
+  {
+   "file": "books/core-m-0001.json",
+   "kind": "meanings",
+   "room": "core",
+   "from": 1000,
+   "to": 1419,
+   "cont": []
+  }
+ ],
+ "sections": [
+  {
+   "id": "encyclopedia",
+   "title": "Encyclopedia",
+   "store": "core",
+   "base": "",
+   "docs": 36,
+   "sentences": 420,
+   "files": [
+    "sections/encyclopedia/docs-0001.json"
+   ],
+   "index": [
+    "sections/encyclopedia/index-0001.json"
+   ]
+  }
+ ]
+}

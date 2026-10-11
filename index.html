@@ -121,7 +121,7 @@ async function rowsFor(m) {
   }
   if (out.length) return out;
   const cat = await getCatalog();
-  const packs = cat.books.filter(b => b.room === "loc" && b.kind === "meanings" &&
+  const packs = cat.books.filter(b => b.room === "core" && b.kind === "meanings" &&
     ((b.from != null && m >= b.from && m <= b.to) || (b.cont || []).includes(m)));
   for (const b of packs) {
     const d = await getFile(b.file);
@@ -152,6 +152,7 @@ function entrance() {
       <div class="card" data-go="english"><div class="id">Hall</div><h3>English</h3><div class="keys">inquiry · status · sitrep</div></div>
       <div class="card" data-go="physics"><div class="id">Wing</div><h3>Physics</h3><div class="keys">force · energy · gravity · relativity · quantum</div></div>
       <div class="card" data-go="philosophy"><div class="id">Wing</div><h3>Philosophy</h3><div class="keys">existence · knowledge · ethics · free will · truth</div></div>
+      <a class="card" href="alexandria/" style="text-decoration:none;color:inherit;border-color:#c9a227"><div class="id">Open</div><h3>Alexandria</h3><div class="keys">the encyclopedia · tutor · timeline · atlas · VR hall</div></a>
       <div class="card" data-go="loc"><div class="id">1000+</div><h3>Library of Congress</h3><div class="keys">absorbed texts · law · the Reformers</div></div>
     </div>`;
   bindCards();

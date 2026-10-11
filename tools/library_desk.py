@@ -82,7 +82,7 @@ class Reader:
         for b in self.catalog().get("books", []):
             if b.get("kind") != "meanings":
                 continue
-            if b.get("room") == "loc" and not ((b.get("from") is not None and b["from"] <= m <= b["to"]) or m in (b.get("cont") or [])):
+            if b.get("room") == "core" and not ((b.get("from") is not None and b["from"] <= m <= b["to"]) or m in (b.get("cont") or [])):
                 continue
             pack = self.json(b["file"]) or {}
             for r in pack.get("s", []):
