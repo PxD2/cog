@@ -54,7 +54,7 @@ sections/<name>/    library sections: docs-NNNN.json = documents as address line
 loc/state.json      next free meaning-id, open files, sections (title + where stored), where each source left off
 loc/registry/       lookup segments: meaning hash -> id, sentence hash -> address, item -> doc pack
 plates/             PMOC-ready inspectable twins
-tools/              cog_absorber.py (engine) + cog_absorber_gui.py (window) + library_desk.py (agent desk, local Ollama)
+tools/              cog_absorber.py (engine) + cog_absorber_gui.py (window) + library_desk.py (agent desk) + publish_articles.py + cog_vault_sync.py (Obsidian mirror)
 index.html          walkable digital library (Library of Congress room reads the absorbed packs)
 ```
 

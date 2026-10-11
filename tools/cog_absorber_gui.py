@@ -25,6 +25,7 @@ sys.path.insert(0, str(HERE))
 import cog_absorber as A        # noqa: E402
 import library_desk as D        # noqa: E402
 import publish_articles as P     # noqa: E402
+import cog_vault_sync as V       # noqa: E402
 
 SETTINGS = HERE / "cog_absorber_gui.json"
 LOG = HERE / "cog_absorber_log.txt"
@@ -398,7 +399,7 @@ class Window(QMainWindow):
         lg.addWidget(self.srcinfo, 2, 0, 1, 5)
         btns = QHBoxLayout()
         for text, fn in [("Refresh", self.refresh), ("Open Alexandria", lambda: webbrowser.open(SITE + "alexandria/")),
-                         ("Publish articles", self.publish_articles),
+                         ("Publish articles", self.publish_articles), ("Sync Obsidian", self.sync_vault),
                          ("Open repo on GitHub", lambda: webbrowser.open(f"https://github.com/{self.s['repo']}")),
                          ("Open log file", self.open_log)]:
             bb = QPushButton(text)
@@ -671,6 +672,21 @@ class Window(QMainWindow):
         self.tabs.setCurrentIndex(0)
         self.start()
 
+    def sync_vault(self):
+        def work():
+            try:
+                vault = Path(self.s.get("vault") or V.DEFAULT_VAULT)
+                if not vault.exists():
+                    return f"Obsidian vault not found at {vault}"
+                ch = V.write(vault, V.build())
+                return f"Obsidian synced from GitHub: {len(ch)} note(s) updated in {V.FOLDER}" + (": " + ", ".join(ch) if ch else "")
+            except Exception as e:      # noqa: BLE001
+                return f"Obsidian sync failed: {e}"
+        def run():
+            msg = work()
+            self.invoke(lambda: self.say(msg))
+        threading.Thread(target=run, daemon=True).start()
+
     def publish_articles(self):
         self.tabs.setCurrentIndex(0)
         self.say("")
@@ -680,7 +696,7 @@ class Window(QMainWindow):
         self._pw.moveToThread(self._pt)
         self._pt.started.connect(self._pw.run)
         self._pw.log.connect(self.say)
-        self._pw.done.connect(lambda r: (self.say("ERROR: " + r["error"]) if r.get("error") else None, self.refresh(), self.desk.reader.refresh()))
+        self._pw.done.connect(lambda r: (self.say("ERROR: " + r["error"]) if r.get("error") else None, self.refresh(), self.desk.reader.refresh(), self.sync_vault()))
         self._pw.done.connect(self._pt.quit)
         self._pt.start()
 
@@ -809,6 +825,7 @@ class Window(QMainWindow):
             self.say(f"{r['held_back']} item(s) held back by the rights gate (may still be under copyright).")
         if not self.dry.isChecked():
             self.refresh()
+            self.sync_vault()
 
     # library status
     def refresh(self):
